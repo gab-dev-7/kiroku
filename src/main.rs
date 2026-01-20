@@ -3,10 +3,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{
-    Terminal,
-    backend::CrosstermBackend,
-};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::fs;
 use std::io;
 
@@ -17,12 +14,16 @@ mod events;
 mod ops;
 mod ui;
 
-use app::{App, Action};
-use events::{EventHandler, AppEvent};
+use app::{Action, App};
+use events::{AppEvent, EventHandler};
 
 fn main() -> Result<()> {
+    tui_logger::init_logger(log::LevelFilter::Info).unwrap();
+    tui_logger::set_default_level(log::LevelFilter::Info);
+
     // Setup directory
-    let home_dir = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("could not find home directory"))?;
+    let home_dir =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("could not find home directory"))?;
     let kiroku_path = home_dir.join("kiroku");
 
     if !kiroku_path.exists() {
@@ -39,7 +40,13 @@ fn main() -> Result<()> {
 
     // Load initial data
     let path_str = kiroku_path.to_string_lossy().to_string();
-    let notes = data::load_notes(&path_str);
+    let notes = match data::load_notes(&path_str) {
+        Ok(n) => n,
+        Err(e) => {
+            log::error!("Failed to load notes: {}", e);
+            vec![]
+        }
+    };
     let mut app = App::new(notes, kiroku_path.clone());
 
     // Setup events
@@ -53,36 +60,55 @@ fn main() -> Result<()> {
                 let action = app.handle_input(key);
                 match action {
                     Action::Quit => app.quit(),
+                    Action::ToggleLogs => {
+                        app.show_logs = !app.show_logs;
+                    }
                     Action::Sync => {
                         app.status_msg = String::from("syncing...");
                         terminal.draw(|f| ui::ui(f, &mut app))?;
-                        
+
                         match ops::run_git_sync(&app.base_path) {
-                             Ok(msg) => app.status_msg = msg,
-                             Err(e) => app.status_msg = format!("Sync error: {}", e),
+                            Ok(msg) => {
+                                log::info!("Sync successful: {}", msg);
+                                app.status_msg = msg;
+                            }
+                            Err(e) => {
+                                log::error!("Sync failed: {}", e);
+                                app.status_msg = format!("Sync error: {}", e);
+                            }
                         }
                     }
                     Action::NewNote => {
                         if let Err(e) = ops::open_editor(&app.base_path, None) {
-                             app.status_msg = format!("Editor error: {}", e);
+                            log::error!("Failed to open editor: {}", e);
+                            app.status_msg = format!("Editor error: {}", e);
                         } else {
-                             let path_str = app.base_path.to_string_lossy().to_string();
-                             app.notes = data::load_notes(&path_str);
-                             terminal.clear()?;
+                            let path_str = app.base_path.to_string_lossy().to_string();
+                            if let Ok(notes) = data::load_notes(&path_str) {
+                                app.notes = notes;
+                            } else {
+                                log::error!("Failed to reload notes after create");
+                            }
+                            terminal.clear()?;
                         }
                     }
                     Action::EditNote => {
                         if let Some(i) = app.list_state.selected() {
-                             if i < app.notes.len() {
-                                 let path = app.notes[i].path.clone();
-                                 if let Err(e) = ops::open_editor(&app.base_path, Some(&path)) {
-                                     app.status_msg = format!("Editor error: {}", e);
-                                 } else {
-                                     let path_str = app.base_path.to_string_lossy().to_string();
-                                     app.notes = data::load_notes(&path_str);
-                                     terminal.clear()?;
-                                 }
-                             }
+                            if i < app.notes.len() {
+                                let path = app.notes[i].path.clone();
+                                if let Err(e) = ops::open_editor(&app.base_path, Some(&path)) {
+                                    log::error!("Failed to open editor for {:?}: {}", path, e);
+                                    app.status_msg = format!("Editor error: {}", e);
+                                } else {
+                                    let path_str = app.base_path.to_string_lossy().to_string();
+                                    if let Ok(notes) = data::load_notes(&path_str) {
+                                        app.notes = notes;
+                                    } else {
+                                        log::error!("Failed to reload notes after edit");
+                                    }
+                                    terminal.clear()?;
+                                }
+                            }
                         }
                     }
                     Action::None => {}
@@ -101,3 +127,4 @@ fn main() -> Result<()> {
 
     Ok(())
 }
+
