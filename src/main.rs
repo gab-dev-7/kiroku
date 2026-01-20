@@ -91,13 +91,62 @@ fn main() -> Result<()> {
                         }
                     }
                     Action::NewNote => {
-                        if let Err(e) = ops::open_editor(&app.base_path, None) {
-                            log::error!("Failed to open editor: {}", e);
-                            app.status_msg = format!("Editor error: {}", e);
-                        } else {
-                            // notify will handle reloading
-                            terminal.clear()?;
+                        app.input_mode = app::InputMode::Editing;
+                        app.input.clear();
+                        app.status_msg = String::from("Enter filename: ");
+                    }
+                    Action::DeleteNote => {
+                        if let Some(i) = app.list_state.selected() {
+                            if i < app.notes.len() {
+                                app.input_mode = app::InputMode::ConfirmDelete;
+                                app.status_msg = format!("Delete '{}'? (y/n)", app.notes[i].title);
+                            }
                         }
+                    }
+                    Action::EnterChar(c) => {
+                        app.input.push(c);
+                    }
+                    Action::Backspace => {
+                        app.input.pop();
+                    }
+                    Action::SubmitInput => match app.input_mode {
+                        app::InputMode::Editing => {
+                            if !app.input.trim().is_empty() {
+                                match ops::create_note(&app.base_path, &app.input) {
+                                    Ok(path) => {
+                                        if let Err(e) =
+                                            ops::open_editor(&app.base_path, Some(&path))
+                                        {
+                                            log::error!("Failed to open editor: {}", e);
+                                        }
+                                        app.input_mode = app::InputMode::Normal;
+                                        app.status_msg = String::from("Note created.");
+                                        terminal.clear()?;
+                                    }
+                                    Err(e) => {
+                                        app.status_msg = format!("Error: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                        app::InputMode::ConfirmDelete => {
+                            if let Some(i) = app.list_state.selected() {
+                                if i < app.notes.len() {
+                                    if let Err(e) = ops::delete_note(&app.notes[i].path) {
+                                        app.status_msg = format!("Delete error: {}", e);
+                                    } else {
+                                        app.status_msg = String::from("Note deleted.");
+                                    }
+                                }
+                            }
+                            app.input_mode = app::InputMode::Normal;
+                        }
+                        _ => {}
+                    },
+                    Action::CancelInput => {
+                        app.input_mode = app::InputMode::Normal;
+                        app.input.clear();
+                        app.status_msg = String::from("Cancelled.");
                     }
                     Action::EditNote => {
                         if let Some(i) = app.list_state.selected() {
