@@ -1,21 +1,36 @@
+use crate::app::App;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
-use crate::app::App;
+use tui_logger::TuiLoggerWidget;
 
 pub fn ui(f: &mut Frame, app: &mut App) {
+    let constraints = if app.show_logs {
+        vec![
+            Constraint::Percentage(70),
+            Constraint::Percentage(30),
+            Constraint::Length(3),
+        ]
+    } else {
+        vec![Constraint::Min(0), Constraint::Length(3)]
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(3)])
+        .constraints(constraints)
         .split(f.area());
+
+    // Main content (List + Preview)
+    let main_area = chunks[0];
+    let status_area = if app.show_logs { chunks[2] } else { chunks[1] };
 
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
-        .split(chunks[0]);
+        .split(main_area);
 
     let items: Vec<ListItem> = app
         .notes
@@ -40,7 +55,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
     let current_content = if let Some(i) = app.list_state.selected() {
         if i < app.notes.len() {
-             app.notes[i].content.as_str()
+            app.notes[i].content.as_str()
         } else {
             ""
         }
@@ -54,7 +69,28 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
     f.render_widget(preview, main_chunks[1]);
 
+    // Logs (if enabled)
+    if app.show_logs {
+        let tui_sm = TuiLoggerWidget::default()
+            .block(
+                Block::default()
+                    .title(" Logs ")
+                    .border_style(Style::default().fg(Color::White).bg(Color::Black))
+                    .borders(Borders::ALL),
+            )
+            .output_separator('|')
+            .output_timestamp(Some("%H:%M:%S".to_string()))
+            .output_level(Some(tui_logger::TuiLoggerLevelOutput::Long))
+            .output_target(false)
+            .output_file(false)
+            .output_line(false)
+            .style(Style::default().fg(Color::White).bg(Color::Black));
+        f.render_widget(tui_sm, chunks[1]);
+    }
+
+    // Status Bar
     let status = Paragraph::new(app.status_msg.as_str())
         .block(Block::default().borders(Borders::ALL).title(" status "));
-    f.render_widget(status, chunks[1]);
+    f.render_widget(status, status_area);
 }
+
