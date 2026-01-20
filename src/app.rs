@@ -1,6 +1,7 @@
-use crate::data::Note;
+use crate::data::{self, Note};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::widgets::ListState;
+use std::collections::VecDeque;
 use std::path::PathBuf;
 
 pub enum Action {
@@ -19,21 +20,59 @@ pub struct App {
     pub base_path: PathBuf,
     pub should_quit: bool,
     pub show_logs: bool,
+    pub recent_indices: VecDeque<usize>,
 }
 
 impl App {
     pub fn new(notes: Vec<Note>, base_path: PathBuf) -> App {
-        let mut state = ListState::default();
-        if !notes.is_empty() {
-            state.select(Some(0));
-        }
-        App {
+        let state = ListState::default();
+        let mut app = App {
             notes,
             list_state: state,
             status_msg: String::from("press 'n' for new note, 'enter' to edit, 'g' to sync"),
             base_path,
             should_quit: false,
             show_logs: false,
+            recent_indices: VecDeque::with_capacity(10),
+        };
+
+        if !app.notes.is_empty() {
+            app.list_state.select(Some(0));
+            app.load_note_content(0);
+        }
+        app
+    }
+
+    pub fn load_note_content(&mut self, index: usize) {
+        if index >= self.notes.len() {
+            return;
+        }
+
+        if self.notes[index].content.is_none() {
+            match data::read_note_content(&self.notes[index].path) {
+                Ok(content) => {
+                    self.notes[index].content = Some(content);
+                    // Add to LRU
+                    self.recent_indices.push_back(index);
+                    if self.recent_indices.len() > 10 {
+                        if let Some(old_idx) = self.recent_indices.pop_front() {
+                            // Don't clear if it's currently selected or still in recent list multiple times (though we should avoid duplicates)
+                            if Some(old_idx) != self.list_state.selected()
+                                && !self.recent_indices.contains(&old_idx)
+                            {
+                                self.notes[old_idx].content = None;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to load note content: {}", e);
+                }
+            }
+        } else {
+            // Already loaded, just move to back of LRU
+            self.recent_indices.retain(|&i| i != index);
+            self.recent_indices.push_back(index);
         }
     }
 
@@ -49,6 +88,7 @@ impl App {
             None => 0,
         };
         self.list_state.select(Some(i));
+        self.load_note_content(i);
     }
 
     pub fn previous(&mut self) {
@@ -63,10 +103,11 @@ impl App {
             None => 0,
         };
         self.list_state.select(Some(i));
+        self.load_note_content(i);
     }
 
     pub fn tick(&mut self) {
-        // Time-based updates (spinners, etc.) will go here
+        // Time-based updates in future
     }
 
     pub fn quit(&mut self) {
@@ -92,4 +133,3 @@ impl App {
         }
     }
 }
-
