@@ -8,10 +8,14 @@ use std::io;
 use std::path::PathBuf;
 use std::process::Command;
 
-pub fn open_editor(base_path: &PathBuf, file_path: Option<&PathBuf>) -> Result<(), KirokuError> {
+pub fn open_editor(base_path: &PathBuf, file_path: Option<&PathBuf>, editor_cmd: Option<&str>) -> Result<(), KirokuError> {
     execute!(io::stdout(), LeaveAlternateScreen)?;
 
-    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
+    let editor = if let Some(cmd) = editor_cmd {
+        cmd.to_string()
+    } else {
+        std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string())
+    };
 
     let mut cmd = Command::new(editor);
     cmd.current_dir(base_path);
