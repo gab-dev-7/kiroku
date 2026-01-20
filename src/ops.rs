@@ -3,6 +3,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
+use std::fs;
 use std::io;
 use std::path::PathBuf;
 use std::process::Command;
@@ -19,7 +20,6 @@ pub fn open_editor(base_path: &PathBuf, file_path: Option<&PathBuf>) -> Result<(
         cmd.arg(path);
     }
 
-    // handle error if editor fails to start
     let status = cmd.status().map_err(|e| KirokuError::Io(e))?;
 
     execute!(io::stdout(), EnterAlternateScreen)?;
@@ -30,6 +30,30 @@ pub fn open_editor(base_path: &PathBuf, file_path: Option<&PathBuf>) -> Result<(
         ));
     }
 
+    Ok(())
+}
+
+pub fn create_note(base_path: &PathBuf, filename: &str) -> Result<PathBuf, KirokuError> {
+    let mut safe_filename = filename.trim().replace(" ", "_");
+    if !safe_filename.ends_with(".md") {
+        safe_filename.push_str(".md");
+    }
+
+    let path = base_path.join(&safe_filename);
+
+    if path.exists() {
+        return Err(KirokuError::Io(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "File already exists",
+        )));
+    }
+
+    fs::File::create(&path)?;
+    Ok(path)
+}
+
+pub fn delete_note(path: &PathBuf) -> Result<(), KirokuError> {
+    fs::remove_file(path)?;
     Ok(())
 }
 
