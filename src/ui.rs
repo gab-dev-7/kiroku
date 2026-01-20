@@ -55,7 +55,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
     let current_content = if let Some(i) = app.list_state.selected() {
         if i < app.notes.len() {
-            app.notes[i].content.as_str()
+            app.notes[i].content.as_deref().unwrap_or("Loading...")
         } else {
             ""
         }
@@ -93,4 +93,3 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         .block(Block::default().borders(Borders::ALL).title(" status "));
     f.render_widget(status, status_area);
 }
-
