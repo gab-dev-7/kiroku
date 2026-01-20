@@ -9,6 +9,7 @@ use std::fs;
 use std::io;
 
 mod app;
+mod config;
 mod data;
 mod errors;
 mod events;
@@ -32,6 +33,15 @@ fn main() -> Result<()> {
         println!("created new notebook directory at {:?}", kiroku_path);
     }
 
+    // Load config
+    let config = match config::load_config() {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("Failed to load config: {}", e);
+            config::Config::default()
+        }
+    };
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -48,7 +58,7 @@ fn main() -> Result<()> {
             vec![]
         }
     };
-    let mut app = App::new(notes, kiroku_path.clone());
+    let mut app = App::new(notes, kiroku_path.clone(), config);
 
     // Setup events
     let events = EventHandler::new(250); // 250ms tick
@@ -114,9 +124,7 @@ fn main() -> Result<()> {
                             if !app.input.trim().is_empty() {
                                 match ops::create_note(&app.base_path, &app.input) {
                                     Ok(path) => {
-                                        if let Err(e) =
-                                            ops::open_editor(&app.base_path, Some(&path))
-                                        {
+                                        if let Err(e) = ops::open_editor(&app.base_path, Some(&path), app.config.editor_cmd.as_deref()) {
                                             log::error!("Failed to open editor: {}", e);
                                         }
                                         app.input_mode = app::InputMode::Normal;
@@ -152,7 +160,7 @@ fn main() -> Result<()> {
                         if let Some(i) = app.list_state.selected() {
                             if i < app.notes.len() {
                                 let path = app.notes[i].path.clone();
-                                if let Err(e) = ops::open_editor(&app.base_path, Some(&path)) {
+                                if let Err(e) = ops::open_editor(&app.base_path, Some(&path), app.config.editor_cmd.as_deref()) {
                                     log::error!("Failed to open editor for {:?}: {}", path, e);
                                     app.status_msg = format!("Editor error: {}", e);
                                 } else {
