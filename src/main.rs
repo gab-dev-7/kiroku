@@ -3,6 +3,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use notify::{RecursiveMode, Watcher};
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::fs;
 use std::io;
@@ -52,6 +53,17 @@ fn main() -> Result<()> {
     // Setup events
     let events = EventHandler::new(250); // 250ms tick
 
+    // Setup file watcher
+    let tx = events.sender.clone();
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        if let Ok(event) = res {
+            if event.kind.is_modify() || event.kind.is_create() || event.kind.is_remove() {
+                let _ = tx.send(AppEvent::FileChanged);
+            }
+        }
+    })?;
+    watcher.watch(&kiroku_path, RecursiveMode::NonRecursive)?;
+
     while !app.should_quit {
         terminal.draw(|f| ui::ui(f, &mut app))?;
 
@@ -83,12 +95,7 @@ fn main() -> Result<()> {
                             log::error!("Failed to open editor: {}", e);
                             app.status_msg = format!("Editor error: {}", e);
                         } else {
-                            let path_str = app.base_path.to_string_lossy().to_string();
-                            if let Ok(notes) = data::load_notes(&path_str) {
-                                app.notes = notes;
-                            } else {
-                                log::error!("Failed to reload notes after create");
-                            }
+                            // notify will handle reloading
                             terminal.clear()?;
                         }
                     }
@@ -100,12 +107,7 @@ fn main() -> Result<()> {
                                     log::error!("Failed to open editor for {:?}: {}", path, e);
                                     app.status_msg = format!("Editor error: {}", e);
                                 } else {
-                                    let path_str = app.base_path.to_string_lossy().to_string();
-                                    if let Ok(notes) = data::load_notes(&path_str) {
-                                        app.notes = notes;
-                                    } else {
-                                        log::error!("Failed to reload notes after edit");
-                                    }
+                                    // notify will handle reloading
                                     terminal.clear()?;
                                 }
                             }
@@ -117,6 +119,28 @@ fn main() -> Result<()> {
             AppEvent::Tick => {
                 app.tick();
             }
+            AppEvent::FileChanged => {
+                let path_str = app.base_path.to_string_lossy().to_string();
+                if let Ok(notes) = data::load_notes(&path_str) {
+                    app.notes = notes;
+                    // Try to maintain selection
+                    if let Some(selected) = app.list_state.selected() {
+                        if selected >= app.notes.len() {
+                            if !app.notes.is_empty() {
+                                app.list_state.select(Some(app.notes.len() - 1));
+                                app.load_note_content(app.notes.len() - 1);
+                            } else {
+                                app.list_state.select(None);
+                            }
+                        } else {
+                            app.load_note_content(selected);
+                        }
+                    } else if !app.notes.is_empty() {
+                        app.list_state.select(Some(0));
+                        app.load_note_content(0);
+                    }
+                }
+            }
         }
     }
 
@@ -127,4 +151,3 @@ fn main() -> Result<()> {
 
     Ok(())
 }
-
