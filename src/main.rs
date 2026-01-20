@@ -197,8 +197,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Event::Key(key) = event::read()? {
             match key.code {
                 KeyCode::Char('q') => should_quit = true,
-                KeyCode::Down => app.next(),
-                KeyCode::Up => app.previous(),
+                KeyCode::Char('j') => app.next(),
+                KeyCode::Char('k') => app.previous(),
                 KeyCode::Char('g') => {
                     app.status_msg = String::from("syncing...");
                     app.status_msg = run_git_sync(&app.base_path);
