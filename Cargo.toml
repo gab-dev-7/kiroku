@@ -9,3 +9,10 @@ crossterm = "0.29.0"
 dirs = "6.0.0"
 ratatui = "0.30.0"
 walkdir = "2.5.0"
+anyhow = "1.0"
+thiserror = "2.0"
+log = "0.4"
+tui-logger = "0.14.0" # checking compatibility, usually safe
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+notify = "8.0.0"
