@@ -1,11 +1,11 @@
-use std::path::PathBuf;
-use std::process::Command;
 use crate::errors::KirokuError;
 use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::io;
+use std::path::PathBuf;
+use std::process::Command;
 
 pub fn open_editor(base_path: &PathBuf, file_path: Option<&PathBuf>) -> Result<(), KirokuError> {
     execute!(io::stdout(), LeaveAlternateScreen)?;
@@ -23,17 +23,21 @@ pub fn open_editor(base_path: &PathBuf, file_path: Option<&PathBuf>) -> Result<(
     let status = cmd.status().map_err(|e| KirokuError::Io(e))?;
 
     execute!(io::stdout(), EnterAlternateScreen)?;
-    
+
     if !status.success() {
-        return Err(KirokuError::Env("Editor exited with non-zero status".into()));
+        return Err(KirokuError::Env(
+            "Editor exited with non-zero status".into(),
+        ));
     }
-    
+
     Ok(())
 }
 
 pub fn run_git_sync(base_path: &PathBuf) -> Result<String, KirokuError> {
     if !base_path.join(".git").exists() {
-        return Err(KirokuError::Git("not a git repo (run 'git init' in folder)".to_string()));
+        return Err(KirokuError::Git(
+            "not a git repo (run 'git init' in folder)".to_string(),
+        ));
     }
 
     let add = Command::new("git")
@@ -41,9 +45,9 @@ pub fn run_git_sync(base_path: &PathBuf) -> Result<String, KirokuError> {
         .arg(".")
         .current_dir(base_path)
         .output()?;
-    
+
     if !add.status.success() {
-         return Err(KirokuError::Git("git add failed".to_string()));
+        return Err(KirokuError::Git("git add failed".to_string()));
     }
 
     let _commit = Command::new("git")
