@@ -17,3 +17,7 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 notify = "8.0.0"
 fuzzy-matcher = "0.3.7"
+arboard = { version = "3.6.1", features = ["wayland-data-control"] }
+
+[dev-dependencies]
+tempfile = "3.24.0"
