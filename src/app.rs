@@ -1,7 +1,7 @@
-use ratatui::widgets::ListState;
-use std::path::PathBuf;
 use crate::data::Note;
 use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::widgets::ListState;
+use std::path::PathBuf;
 
 pub enum Action {
     None,
@@ -9,6 +9,7 @@ pub enum Action {
     Sync,
     NewNote,
     EditNote,
+    ToggleLogs,
 }
 
 pub struct App {
@@ -17,6 +18,7 @@ pub struct App {
     pub status_msg: String,
     pub base_path: PathBuf,
     pub should_quit: bool,
+    pub show_logs: bool,
 }
 
 impl App {
@@ -31,6 +33,7 @@ impl App {
             status_msg: String::from("press 'n' for new note, 'enter' to edit, 'g' to sync"),
             base_path,
             should_quit: false,
+            show_logs: false,
         }
     }
 
@@ -84,7 +87,9 @@ impl App {
             KeyCode::Char('g') => Action::Sync,
             KeyCode::Char('n') => Action::NewNote,
             KeyCode::Enter => Action::EditNote,
+            KeyCode::F(12) => Action::ToggleLogs,
             _ => Action::None,
         }
     }
 }
+
