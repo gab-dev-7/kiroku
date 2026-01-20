@@ -9,14 +9,12 @@ use walkdir::WalkDir;
 pub struct Note {
     pub path: PathBuf,
     pub title: String,
-    pub content: String,
+    pub content: Option<String>,
     pub last_modified: SystemTime,
 }
 
 impl Note {
-    fn from_path(path: PathBuf) -> Result<Self> {
-        let content = fs::read_to_string(&path)
-            .with_context(|| format!("Failed to read file: {:?}", path))?;
+    pub fn from_path(path: PathBuf) -> Result<Self> {
         let metadata = fs::metadata(&path)
             .with_context(|| format!("Failed to get metadata for: {:?}", path))?;
 
@@ -29,10 +27,14 @@ impl Note {
         Ok(Self {
             path,
             title,
-            content,
+            content: None,
             last_modified: metadata.modified().unwrap_or(SystemTime::now()),
         })
     }
+}
+
+pub fn read_note_content(path: &PathBuf) -> Result<String> {
+    fs::read_to_string(path).with_context(|| format!("Failed to read file: {:?}", path))
 }
 
 pub fn load_notes(directory: &str) -> Result<Vec<Note>> {
@@ -54,4 +56,3 @@ pub fn load_notes(directory: &str) -> Result<Vec<Note>> {
     notes.sort_by(|a, b| b.last_modified.cmp(&a.last_modified));
     Ok(notes)
 }
-
