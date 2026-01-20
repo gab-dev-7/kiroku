@@ -90,9 +90,16 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
     // Status Bar
     let status_text = match app.input_mode {
-        InputMode::Normal => app.status_msg.clone(),
+        InputMode::Normal => {
+            if !app.search_query.is_empty() {
+                format!("Filtered by: '{}' (Esc to clear)", app.search_query)
+            } else {
+                app.status_msg.clone()
+            }
+        }
         InputMode::Editing => format!("CREATING NOTE: {}", app.status_msg),
         InputMode::ConfirmDelete => format!("DELETING NOTE: {}", app.status_msg),
+        InputMode::Search => format!("SEARCH: {}", app.search_query),
     };
 
     let status = Paragraph::new(status_text.as_str())

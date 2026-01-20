@@ -171,23 +171,8 @@ fn main() -> Result<()> {
             AppEvent::FileChanged => {
                 let path_str = app.base_path.to_string_lossy().to_string();
                 if let Ok(notes) = data::load_notes(&path_str) {
-                    app.notes = notes;
-                    // Try to maintain selection
-                    if let Some(selected) = app.list_state.selected() {
-                        if selected >= app.notes.len() {
-                            if !app.notes.is_empty() {
-                                app.list_state.select(Some(app.notes.len() - 1));
-                                app.load_note_content(app.notes.len() - 1);
-                            } else {
-                                app.list_state.select(None);
-                            }
-                        } else {
-                            app.load_note_content(selected);
-                        }
-                    } else if !app.notes.is_empty() {
-                        app.list_state.select(Some(0));
-                        app.load_note_content(0);
-                    }
+                    app.all_notes = notes;
+                    app.update_search(); // Re-apply filter and update app.notes
                 }
             }
         }

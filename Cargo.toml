@@ -16,3 +16,4 @@ tui-logger = "0.18.1"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 notify = "8.0.0"
+fuzzy-matcher = "0.3.7"
