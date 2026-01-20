@@ -10,7 +10,19 @@ pub enum Action {
     Sync,
     NewNote,
     EditNote,
+    DeleteNote,
     ToggleLogs,
+    EnterChar(char),
+    Backspace,
+    SubmitInput,
+    CancelInput,
+}
+
+#[derive(PartialEq)]
+pub enum InputMode {
+    Normal,
+    Editing,
+    ConfirmDelete,
 }
 
 pub struct App {
@@ -21,6 +33,8 @@ pub struct App {
     pub should_quit: bool,
     pub show_logs: bool,
     pub recent_indices: VecDeque<usize>,
+    pub input: String,
+    pub input_mode: InputMode,
 }
 
 impl App {
@@ -29,11 +43,15 @@ impl App {
         let mut app = App {
             notes,
             list_state: state,
-            status_msg: String::from("press 'n' for new note, 'enter' to edit, 'g' to sync"),
+            status_msg: String::from(
+                "press 'n' for new note, 'enter' to edit, 'g' to sync, 'd' to delete",
+            ),
             base_path,
             should_quit: false,
             show_logs: false,
             recent_indices: VecDeque::with_capacity(10),
+            input: String::new(),
+            input_mode: InputMode::Normal,
         };
 
         if !app.notes.is_empty() {
@@ -115,21 +133,36 @@ impl App {
     }
 
     pub fn handle_input(&mut self, key: KeyEvent) -> Action {
-        match key.code {
-            KeyCode::Char('q') => Action::Quit,
-            KeyCode::Char('j') => {
-                self.next();
-                Action::None
-            }
-            KeyCode::Char('k') => {
-                self.previous();
-                Action::None
-            }
-            KeyCode::Char('g') => Action::Sync,
-            KeyCode::Char('n') => Action::NewNote,
-            KeyCode::Enter => Action::EditNote,
-            KeyCode::F(12) => Action::ToggleLogs,
-            _ => Action::None,
+        match self.input_mode {
+            InputMode::Normal => match key.code {
+                KeyCode::Char('q') => Action::Quit,
+                KeyCode::Char('j') => {
+                    self.next();
+                    Action::None
+                }
+                KeyCode::Char('k') => {
+                    self.previous();
+                    Action::None
+                }
+                KeyCode::Char('g') => Action::Sync,
+                KeyCode::Char('n') => Action::NewNote,
+                KeyCode::Char('d') => Action::DeleteNote,
+                KeyCode::Enter => Action::EditNote,
+                KeyCode::F(12) => Action::ToggleLogs,
+                _ => Action::None,
+            },
+            InputMode::Editing => match key.code {
+                KeyCode::Enter => Action::SubmitInput,
+                KeyCode::Esc => Action::CancelInput,
+                KeyCode::Backspace => Action::Backspace,
+                KeyCode::Char(c) => Action::EnterChar(c),
+                _ => Action::None,
+            },
+            InputMode::ConfirmDelete => match key.code {
+                KeyCode::Char('y') => Action::SubmitInput,
+                KeyCode::Char('n') | KeyCode::Esc => Action::CancelInput,
+                _ => Action::None,
+            },
         }
     }
 }
