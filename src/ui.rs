@@ -1,9 +1,9 @@
-use crate::app::App;
+use crate::app::{App, InputMode};
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 use tui_logger::TuiLoggerWidget;
 
@@ -89,7 +89,76 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     }
 
     // Status Bar
-    let status = Paragraph::new(app.status_msg.as_str())
+    let status_text = match app.input_mode {
+        InputMode::Normal => app.status_msg.clone(),
+        InputMode::Editing => format!("CREATING NOTE: {}", app.status_msg),
+        InputMode::ConfirmDelete => format!("DELETING NOTE: {}", app.status_msg),
+    };
+
+    let status = Paragraph::new(status_text.as_str())
         .block(Block::default().borders(Borders::ALL).title(" status "));
     f.render_widget(status, status_area);
+
+    // Popups
+    if app.input_mode == InputMode::Editing {
+        let area = centered_rect(60, 20, f.area());
+        f.render_widget(Clear, area); // Clear background
+
+        let input_block = Block::default()
+            .title(" New Note Filename ")
+            .borders(Borders::ALL)
+            .style(Style::default().bg(Color::Blue).fg(Color::White));
+
+        let input_text = Paragraph::new(app.input.as_str())
+            .block(input_block)
+            .style(Style::default().fg(Color::White));
+
+        f.render_widget(input_text, area);
+    }
+
+    if app.input_mode == InputMode::ConfirmDelete {
+        let area = centered_rect(40, 20, f.area());
+        f.render_widget(Clear, area);
+
+        let confirm_block = Block::default()
+            .title(" Confirm Delete ")
+            .borders(Borders::ALL)
+            .style(Style::default().bg(Color::Red).fg(Color::White));
+
+        let text = format!("Are you sure you want to delete this note?\n\n(y)es / (n)o");
+        let confirm_text = Paragraph::new(text)
+            .block(confirm_block)
+            .alignment(ratatui::layout::Alignment::Center)
+            .wrap(Wrap { trim: true });
+
+        f.render_widget(confirm_text, area);
+    }
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_y) / 2),
+                Constraint::Percentage(percent_y),
+                Constraint::Percentage((100 - percent_y) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(r);
+
+    let layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_x) / 2),
+                Constraint::Percentage(percent_x),
+                Constraint::Percentage((100 - percent_x) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(popup_layout[1]);
+
+    layout[1]
 }
