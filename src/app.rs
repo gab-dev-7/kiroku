@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::data::{self, Note};
 use crossterm::event::{KeyCode, KeyEvent};
 use fuzzy_matcher::FuzzyMatcher;
@@ -34,6 +35,7 @@ pub struct App {
     pub list_state: ListState,
     pub status_msg: String,
     pub base_path: PathBuf,
+    pub config: Config,
     pub should_quit: bool,
     pub show_logs: bool,
     pub recent_indices: VecDeque<usize>, // For simple LRU cache
@@ -43,7 +45,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(notes: Vec<Note>, base_path: PathBuf) -> App {
+    pub fn new(notes: Vec<Note>, base_path: PathBuf, config: Config) -> App {
         let state = ListState::default();
         let all_notes = notes.clone();
         let mut app = App {
@@ -54,6 +56,7 @@ impl App {
                 "press 'n' for new note, 'enter' to edit, 'g' to sync, 'd' to delete, '/' to search",
             ),
             base_path,
+            config,
             should_quit: false,
             show_logs: false,
             recent_indices: VecDeque::with_capacity(10),
