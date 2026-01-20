@@ -1,29 +1,48 @@
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyEvent};
+use std::sync::mpsc;
+use std::thread;
 use std::time::Duration;
 
 pub enum AppEvent {
     Input(KeyEvent),
     Tick,
+    FileChanged,
 }
 
 pub struct EventHandler {
-    tick_rate: Duration,
+    pub sender: mpsc::Sender<AppEvent>,
+    receiver: mpsc::Receiver<AppEvent>,
 }
 
 impl EventHandler {
     pub fn new(tick_rate_ms: u64) -> Self {
+        let (tx, rx) = mpsc::channel();
+        let tick_rate = Duration::from_millis(tick_rate_ms);
+
+        let tx_input = tx.clone();
+        thread::spawn(move || {
+            loop {
+                if event::poll(tick_rate).unwrap_or(false) {
+                    if let Event::Key(key) = event::read().unwrap() {
+                        if tx_input.send(AppEvent::Input(key)).is_err() {
+                            break;
+                        }
+                    }
+                }
+                if tx_input.send(AppEvent::Tick).is_err() {
+                    break;
+                }
+            }
+        });
+
         Self {
-            tick_rate: Duration::from_millis(tick_rate_ms),
+            sender: tx,
+            receiver: rx,
         }
     }
 
     pub fn next(&self) -> Result<AppEvent> {
-        if event::poll(self.tick_rate)? {
-            if let Event::Key(key) = event::read()? {
-                return Ok(AppEvent::Input(key));
-            }
-        }
-        Ok(AppEvent::Tick)
+        Ok(self.receiver.recv()?)
     }
 }
