@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::data::{self, Note};
+use arboard::Clipboard;
 use crossterm::event::{KeyCode, KeyEvent};
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
@@ -14,6 +15,8 @@ pub enum Action {
     NewNote,
     EditNote,
     DeleteNote,
+    CopyContent,
+    CopyPath,
     ToggleLogs,
     EnterChar(char),
     Backspace,
@@ -38,22 +41,34 @@ pub struct App {
     pub config: Config,
     pub should_quit: bool,
     pub show_logs: bool,
-    pub recent_indices: VecDeque<usize>, // For simple LRU cache
+    pub recent_indices: VecDeque<usize>,
     pub input: String,
     pub search_query: String,
     pub input_mode: InputMode,
+    pub syncing: bool,
+    pub spinner_index: usize,
+    pub clipboard: Option<Clipboard>,
 }
 
 impl App {
     pub fn new(notes: Vec<Note>, base_path: PathBuf, config: Config) -> App {
         let state = ListState::default();
         let all_notes = notes.clone();
+
+        let clipboard = match Clipboard::new() {
+            Ok(cb) => Some(cb),
+            Err(e) => {
+                log::warn!("Failed to initialize clipboard: {}", e);
+                None
+            }
+        };
+
         let mut app = App {
             notes,
             all_notes,
             list_state: state,
             status_msg: String::from(
-                "press 'n' for new note, 'enter' to edit, 'g' to sync, 'd' to delete, '/' to search",
+                " 'n' for new note, 'enter' to edit, 'g' to sync, 'd' to delete, '/' to search",
             ),
             base_path,
             config,
@@ -63,6 +78,9 @@ impl App {
             input: String::new(),
             search_query: String::new(),
             input_mode: InputMode::Normal,
+            syncing: false,
+            spinner_index: 0,
+            clipboard,
         };
 
         if !app.notes.is_empty() {
@@ -109,11 +127,11 @@ impl App {
             match data::read_note_content(&self.notes[index].path) {
                 Ok(content) => {
                     self.notes[index].content = Some(content);
-                    // Add to LRU
+                    // Add to cache
                     self.recent_indices.push_back(index);
                     if self.recent_indices.len() > 10 {
                         if let Some(old_idx) = self.recent_indices.pop_front() {
-                            // Don't clear if it's currently selected or still in recent list multiple times (though we should avoid duplicates)
+                            // Don't clear if it's currently selected or still in recent list
                             if Some(old_idx) != self.list_state.selected()
                                 && !self.recent_indices.contains(&old_idx)
                             {
@@ -164,7 +182,9 @@ impl App {
     }
 
     pub fn tick(&mut self) {
-        // Time-based updates in future
+        if self.syncing {
+            self.spinner_index = (self.spinner_index + 1) % 4;
+        }
     }
 
     pub fn quit(&mut self) {
@@ -186,6 +206,8 @@ impl App {
                 KeyCode::Char('g') => Action::Sync,
                 KeyCode::Char('n') => Action::NewNote,
                 KeyCode::Char('d') => Action::DeleteNote,
+                KeyCode::Char('y') => Action::CopyContent,
+                KeyCode::Char('Y') => Action::CopyPath,
                 KeyCode::Char('/') => {
                     self.input_mode = InputMode::Search;
                     self.search_query.clear();
@@ -238,5 +260,50 @@ impl App {
                 _ => Action::None,
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::SystemTime;
+
+    fn create_test_note(title: &str) -> Note {
+        Note {
+            path: PathBuf::from(format!("{}.md", title)),
+            title: title.to_string(),
+            content: Some("content".to_string()),
+            last_modified: SystemTime::now(),
+            size: 100,
+        }
+    }
+
+    #[test]
+    fn test_search_filtering() {
+        let notes = vec![
+            create_test_note("alpha"),
+            create_test_note("beta"),
+            create_test_note("gamma"),
+            create_test_note("apple"),
+        ];
+
+        let mut app = App::new(notes, PathBuf::from("/tmp"), Config::default());
+
+        app.search_query = "ap".to_string();
+        app.update_search();
+
+        assert_eq!(app.notes.len(), 2);
+        assert!(app.notes.iter().any(|n| n.title == "alpha"));
+        assert!(app.notes.iter().any(|n| n.title == "apple"));
+
+        app.search_query = "bet".to_string();
+        app.update_search();
+
+        assert_eq!(app.notes.len(), 1);
+        assert_eq!(app.notes[0].title, "beta");
+
+        app.search_query = "".to_string();
+        app.update_search();
+        assert_eq!(app.notes.len(), 4);
     }
 }
