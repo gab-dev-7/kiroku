@@ -8,6 +8,7 @@ pub enum AppEvent {
     Input(KeyEvent),
     Tick,
     FileChanged,
+    SyncFinished(Result<String, String>),
 }
 
 pub struct EventHandler {
