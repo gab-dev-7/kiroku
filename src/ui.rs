@@ -10,7 +10,7 @@ use ratatui::{
 use tui_logger::TuiLoggerWidget;
 
 const ACCENT_COLOR: Color = Color::Rgb(137, 220, 235);
-const SELECTION_COLOR: Color = Color::Rgb(187, 154, 247)
+const SELECTION_COLOR: Color = Color::Rgb(187, 154, 247);
 const DIM_COLOR: Color = Color::Rgb(108, 112, 134);
 const HEADER_COLOR: Color = Color::Rgb(137, 180, 250);
 const BOLD_COLOR: Color = Color::Rgb(243, 139, 168);
