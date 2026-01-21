@@ -806,7 +806,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "kiroku"
+name = "kiroku-tui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
