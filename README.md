@@ -2,49 +2,88 @@
 
 **kiroku** (記録) — _Japanese for "record", "document", or "archive"._
 
-A minimal, terminal-based note management tool written in Rust.
+A simple, terminal-based personal journaling and note-taking tool written in Rust.
 
-## philosophy
+kiroku helps you manage a collection of markdown notes directly from your terminal. It stores your notes in `~/kiroku` and integrates with Git for easy synchronization.
 
-The name _Kiroku_ implies a permanent, official record. This tool is built on the idea that your notes should be treated as a durable archive, not a temporary scratchpad.
+## Features
 
-It adheres to three principles:
+- **Terminal Interface**: Clean TUI built with `ratatui`.
+- **Fuzzy Search**: Quickly find notes by title.
+- **External Editor**: Opens notes in your preferred editor (Vim, Nano, VS Code, etc.).
+- **Git Sync**: Built-in command to add, commit, and push changes to a remote repository.
+- **File Watching**: Automatically updates the list when files are changed externally.
+- **Clipboard Integration**: Copy note content or file paths directly to your clipboard.
 
-1.  **Plain Text:** Data lives in standard Markdown files. No databases, no vendor lock-in.
-2.  **Git Backed:** Your history is preserved. A single keystroke secures your data.
-3.  **Editor Agnostic:** The tool handles the organization; your preferred editor handles the writing.
+## Installation
 
-## features
+Ensure you have [Rust and Cargo](https://rustup.rs/) installed.
 
-- **Split-Pane Interface:** Browse a list of notes while previewing contents.
-- **Git Integration:** Press `g` to automatically stage, commit, and push changes.
-- **Editor Support:** Seamlessly opens your `$EDITOR` (vim, nvim, helix, nano).
-- **Time Sorting:** Notes are automatically ordered by modification time (newest first).
+### From Git (Recommended for users)
 
-## installation
+You can install `kiroku` directly from the repository:
 
-### prerequisites
+```bash
+cargo install --git https://github.com/gab-dev-7/kiroku
+```
 
-- Rust and Cargo
-- Git
-- A terminal text editor
+### From Source (For development)
 
-## usage
+If you have cloned the repository, you can install it locally:
 
-| Key       | Action                             |
-| --------- | ---------------------------------- |
-| `j` / `k` | Navigate the note list             |
-| `enter`   | Open the selected note for editing |
-| `n`       | Create a new note                  |
-| `g`       | Sync with Git (add, commit, push)  |
-| `q`       | Quit application                   |
+```bash
+cargo install --path .
+```
 
-## configuration
+## Usage
 
-**Storage**
-By default, the application reads and writes to:
-`~/kiroku/`
+Run the application:
 
-## development
+```bash
+kiroku
+```
 
-This is a learning project for Rust and TUI architecture. Contributions are welcome.
+On the first run, it will create a `~/kiroku` directory. You can initialize a git repository there if you want to use the sync feature:
+
+```bash
+cd ~/kiroku
+git init
+# Add your remote...
+```
+
+### Keybindings
+
+**Normal Mode**
+
+- `n`: Create a new note
+- `Enter`: Edit the selected note
+- `d`: Delete the selected note
+- `g`: Sync with Git (add, commit, push)
+- `/`: Enter search mode
+- `j` / `k`: Navigate up/down
+- `y`: Copy note content to clipboard
+- `Y`: Copy note file path to clipboard
+- `q`: Quit
+- `F12`: Toggle debug logs
+
+**Search Mode**
+
+- Type to filter notes
+- `Enter`: Keep current filter and return to list
+- `Esc`: Clear search and return to list
+
+## Configuration
+
+You can configure kiroku by creating a file at `~/.config/kiroku/config.toml`.
+
+**Example `config.toml`:**
+
+```toml
+# Command to open your editor.
+# If omitted, defaults to $EDITOR environment variable or "vim".
+editor_cmd = "nvim"
+
+# Auto-sync is currently reserved for future use
+auto_sync = false
+```
+
