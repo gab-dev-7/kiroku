@@ -1,4 +1,5 @@
 use anyhow::Result;
+use arboard::Clipboard;
 use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
@@ -61,7 +62,7 @@ fn main() -> Result<()> {
     let mut app = App::new(notes, kiroku_path.clone(), config);
 
     // Setup events
-    let events = EventHandler::new(250); // 250ms tick
+    let events = EventHandler::new(250);
 
     // Setup file watcher
     let tx = events.sender.clone();
@@ -86,18 +87,18 @@ fn main() -> Result<()> {
                         app.show_logs = !app.show_logs;
                     }
                     Action::Sync => {
-                        app.status_msg = String::from("syncing...");
-                        terminal.draw(|f| ui::ui(f, &mut app))?;
+                        if !app.syncing {
+                            app.syncing = true;
+                            app.status_msg = String::from("syncing...");
 
-                        match ops::run_git_sync(&app.base_path) {
-                            Ok(msg) => {
-                                log::info!("Sync successful: {}", msg);
-                                app.status_msg = msg;
-                            }
-                            Err(e) => {
-                                log::error!("Sync failed: {}", e);
-                                app.status_msg = format!("Sync error: {}", e);
-                            }
+                            let tx = events.sender.clone();
+                            let base_path = app.base_path.clone();
+
+                            std::thread::spawn(move || {
+                                let result =
+                                    ops::run_git_sync(&base_path).map_err(|e| e.to_string());
+                                let _ = tx.send(AppEvent::SyncFinished(result));
+                            });
                         }
                     }
                     Action::NewNote => {
@@ -124,7 +125,11 @@ fn main() -> Result<()> {
                             if !app.input.trim().is_empty() {
                                 match ops::create_note(&app.base_path, &app.input) {
                                     Ok(path) => {
-                                        if let Err(e) = ops::open_editor(&app.base_path, Some(&path), app.config.editor_cmd.as_deref()) {
+                                        if let Err(e) = ops::open_editor(
+                                            &app.base_path,
+                                            Some(&path),
+                                            app.config.editor_cmd.as_deref(),
+                                        ) {
                                             log::error!("Failed to open editor: {}", e);
                                         }
                                         app.input_mode = app::InputMode::Normal;
@@ -160,7 +165,11 @@ fn main() -> Result<()> {
                         if let Some(i) = app.list_state.selected() {
                             if i < app.notes.len() {
                                 let path = app.notes[i].path.clone();
-                                if let Err(e) = ops::open_editor(&app.base_path, Some(&path), app.config.editor_cmd.as_deref()) {
+                                if let Err(e) = ops::open_editor(
+                                    &app.base_path,
+                                    Some(&path),
+                                    app.config.editor_cmd.as_deref(),
+                                ) {
                                     log::error!("Failed to open editor for {:?}: {}", path, e);
                                     app.status_msg = format!("Editor error: {}", e);
                                 } else {
@@ -170,7 +179,76 @@ fn main() -> Result<()> {
                             }
                         }
                     }
+                    Action::CopyContent => {
+                        if let Some(i) = app.list_state.selected() {
+                            if i < app.notes.len() {
+                                let note = &app.notes[i];
+                                if let Some(content) = &note.content {
+                                    // Lazy init clipboard if missing
+                                    if app.clipboard.is_none() {
+                                        match Clipboard::new() {
+                                            Ok(cb) => app.clipboard = Some(cb),
+                                            Err(e) => {
+                                                log::warn!("Failed to re-init clipboard: {}", e)
+                                            }
+                                        }
+                                    }
+
+                                    if let Some(cb) = &mut app.clipboard {
+                                        if let Err(e) = cb.set_text(content.clone()) {
+                                            app.status_msg = format!("Copy error: {}", e);
+                                        } else {
+                                            app.status_msg =
+                                                String::from("Content copied to clipboard.");
+                                        }
+                                    } else {
+                                        app.status_msg = String::from("Clipboard unavailable.");
+                                    }
+                                } else {
+                                    app.status_msg = String::from("Note content not loaded.");
+                                }
+                            }
+                        }
+                    }
+                    Action::CopyPath => {
+                        if let Some(i) = app.list_state.selected() {
+                            if i < app.notes.len() {
+                                let path = app.notes[i].path.to_string_lossy().to_string();
+
+                                // Lazy init clipboard if missing
+                                if app.clipboard.is_none() {
+                                    match Clipboard::new() {
+                                        Ok(cb) => app.clipboard = Some(cb),
+                                        Err(e) => log::warn!("Failed to re-init clipboard: {}", e),
+                                    }
+                                }
+
+                                if let Some(cb) = &mut app.clipboard {
+                                    if let Err(e) = cb.set_text(path) {
+                                        app.status_msg = format!("Copy error: {}", e);
+                                    } else {
+                                        app.status_msg = String::from("Path copied to clipboard.");
+                                    }
+                                } else {
+                                    app.status_msg = String::from("Clipboard unavailable.");
+                                }
+                            }
+                        }
+                    }
                     Action::None => {}
+                }
+            }
+            AppEvent::SyncFinished(result) => {
+                app.syncing = false;
+                match result {
+                    Ok(msg) => {
+                        log::info!("Sync successful: {}", msg);
+                        app.status_msg = msg;
+                    }
+                    Err(e) => {
+                        log::error!("Sync failed: {}", e);
+                        app.status_msg = format!("Sync error: {}", e);
+                    }
                 }
             }
             AppEvent::Tick => {
@@ -180,7 +258,7 @@ fn main() -> Result<()> {
                 let path_str = app.base_path.to_string_lossy().to_string();
                 if let Ok(notes) = data::load_notes(&path_str) {
                     app.all_notes = notes;
-                    app.update_search(); // Re-apply filter and update app.notes
+                    app.update_search();
                 }
             }
         }
