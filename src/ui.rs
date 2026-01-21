@@ -1,11 +1,19 @@
 use crate::app::{App, InputMode};
+use chrono::{DateTime, Local};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 use tui_logger::TuiLoggerWidget;
+
+const ACCENT_COLOR: Color = Color::Rgb(137, 220, 235);
+const SELECTION_COLOR: Color = Color::Rgb(187, 154, 247)
+const DIM_COLOR: Color = Color::Rgb(108, 112, 134);
+const HEADER_COLOR: Color = Color::Rgb(137, 180, 250);
+const BOLD_COLOR: Color = Color::Rgb(243, 139, 168);
 
 pub fn ui(f: &mut Frame, app: &mut App) {
     let constraints = if app.show_logs {
@@ -23,7 +31,6 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         .constraints(constraints)
         .split(f.area());
 
-    // Main content (List + Preview)
     let main_area = chunks[0];
     let status_area = if app.show_logs { chunks[2] } else { chunks[1] };
 
@@ -32,93 +39,202 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
         .split(main_area);
 
+    // --- List Widget ---
     let items: Vec<ListItem> = app
         .notes
         .iter()
-        .map(|note| ListItem::new(note.title.clone()))
+        .map(|note| ListItem::new(format!(" {} ", note.title)))
         .collect();
 
     let list = List::new(items)
         .block(
             Block::default()
-                .title(" kiroku notes ")
-                .borders(Borders::ALL),
+                .title(" Notes ")
+                .title_style(Style::default().add_modifier(Modifier::BOLD))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(ACCENT_COLOR)),
         )
         .highlight_style(
             Style::default()
-                .add_modifier(Modifier::REVERSED)
-                .fg(Color::Yellow),
+                .bg(SELECTION_COLOR)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol(">> ");
+        .highlight_symbol(" ");
 
     f.render_stateful_widget(list, main_chunks[0], &mut app.list_state);
 
-    let current_content = if let Some(i) = app.list_state.selected() {
-        if i < app.notes.len() {
-            app.notes[i].content.as_deref().unwrap_or("Loading...")
+    // Preview Widget
+    let (preview_content, preview_title, preview_footer) =
+        if let Some(i) = app.list_state.selected() {
+            if i < app.notes.len() {
+                let note = &app.notes[i];
+                let content = note.content.as_deref().unwrap_or("Loading...");
+
+                let lines: Vec<Line> = content
+                    .lines()
+                    .map(|line| {
+                        if line.starts_with("# ") {
+                            Line::from(Span::styled(
+                                line,
+                                Style::default()
+                                    .fg(HEADER_COLOR)
+                                    .add_modifier(Modifier::BOLD),
+                            ))
+                        } else if line.starts_with("## ") {
+                            Line::from(Span::styled(
+                                line,
+                                Style::default()
+                                    .fg(ACCENT_COLOR)
+                                    .add_modifier(Modifier::BOLD),
+                            ))
+                        } else if line.starts_with("### ") {
+                            Line::from(Span::styled(
+                                line,
+                                Style::default()
+                                    .fg(SELECTION_COLOR)
+                                    .add_modifier(Modifier::BOLD),
+                            ))
+                        } else if line.starts_with(
+                            "`
+```",
+                        ) {
+                            Line::from(Span::styled(line, Style::default().fg(DIM_COLOR)))
+                        } else if line.starts_with("> ") {
+                            Line::from(Span::styled(
+                                line,
+                                Style::default()
+                                    .fg(Color::Rgb(166, 227, 161))
+                                    .add_modifier(Modifier::ITALIC),
+                            ))
+                        } else {
+                            Line::from(line)
+                        }
+                    })
+                    .collect();
+
+                let title = format!(" {} ", note.title);
+                let dt: DateTime<Local> = note.last_modified.into();
+                let footer = format!(" {} | {} bytes ", dt.format("%Y-%m-%d %H:%M"), note.size);
+
+                (lines, title, footer)
+            } else {
+                (vec![Line::from("")], " Preview ".to_string(), String::new())
+            }
         } else {
-            ""
-        }
-    } else {
-        "press 'n' to create a new note."
-    };
+            (
+                vec![Line::from(" Press 'n' to create a new note.")],
+                " Kiroku ".to_string(),
+                String::new(),
+            )
+        };
 
-    let preview = Paragraph::new(current_content)
-        .block(Block::default().title(" preview ").borders(Borders::ALL))
-        .wrap(Wrap { trim: true });
+    let preview_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .split(main_chunks[1]);
 
-    f.render_widget(preview, main_chunks[1]);
+    let preview = Paragraph::new(preview_content)
+        .block(
+            Block::default()
+                .title(preview_title)
+                .title_style(Style::default().add_modifier(Modifier::BOLD))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(ACCENT_COLOR)),
+        )
+        .wrap(Wrap { trim: false });
 
-    // Logs (if enabled)
+    f.render_widget(preview, preview_chunks[0]);
+
+    if !preview_footer.is_empty() {
+        let footer_block = Block::default()
+            .borders(Borders::TOP)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(DIM_COLOR));
+
+        let footer = Paragraph::new(preview_footer)
+            .block(footer_block)
+            .style(Style::default().fg(DIM_COLOR))
+            .alignment(ratatui::layout::Alignment::Right);
+        f.render_widget(footer, preview_chunks[1]);
+    }
+
+    // Logs
     if app.show_logs {
         let tui_sm = TuiLoggerWidget::default()
             .block(
                 Block::default()
-                    .title(" Logs ")
-                    .border_style(Style::default().fg(Color::White).bg(Color::Black))
-                    .borders(Borders::ALL),
+                    .title(" System Logs ")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(Style::default().fg(SELECTION_COLOR)),
             )
             .output_separator('|')
             .output_timestamp(Some("%H:%M:%S".to_string()))
-            .output_level(Some(tui_logger::TuiLoggerLevelOutput::Long))
-            .output_target(false)
-            .output_file(false)
-            .output_line(false)
-            .style(Style::default().fg(Color::White).bg(Color::Black));
+            .style(Style::default().fg(Color::Reset));
         f.render_widget(tui_sm, chunks[1]);
     }
 
     // Status Bar
+    let spinner = if app.syncing {
+        let frames = ["|", "/", "-", "\\"];
+        format!(" {} ", frames[app.spinner_index])
+    } else {
+        String::new()
+    };
+
     let status_text = match app.input_mode {
         InputMode::Normal => {
             if !app.search_query.is_empty() {
-                format!("Filtered by: '{}' (Esc to clear)", app.search_query)
+                format!(
+                    "{} Filtered: '{}' (Esc to clear)",
+                    spinner, app.search_query
+                )
             } else {
-                app.status_msg.clone()
+                format!("{}{}", spinner, app.status_msg)
             }
         }
-        InputMode::Editing => format!("CREATING NOTE: {}", app.status_msg),
-        InputMode::ConfirmDelete => format!("DELETING NOTE: {}", app.status_msg),
-        InputMode::Search => format!("SEARCH: {}", app.search_query),
+        InputMode::Editing => format!("{} CREATING NOTE: {}", spinner, app.status_msg),
+        InputMode::ConfirmDelete => format!("{} DELETING NOTE: {}", spinner, app.status_msg),
+        InputMode::Search => format!("{} SEARCH: {}", spinner, app.search_query),
     };
 
+    let status_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(DIM_COLOR));
+
     let status = Paragraph::new(status_text.as_str())
-        .block(Block::default().borders(Borders::ALL).title(" status "));
+        .block(status_block)
+        .style(
+            Style::default()
+                .fg(ACCENT_COLOR)
+                .add_modifier(Modifier::BOLD),
+        );
+
     f.render_widget(status, status_area);
 
     // Popups
     if app.input_mode == InputMode::Editing {
         let area = centered_rect(60, 20, f.area());
-        f.render_widget(Clear, area); // Clear background
+        f.render_widget(Clear, area);
 
         let input_block = Block::default()
-            .title(" New Note Filename ")
+            .title(" New Note ")
             .borders(Borders::ALL)
-            .style(Style::default().bg(Color::Blue).fg(Color::White));
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Rgb(166, 227, 161)));
 
         let input_text = Paragraph::new(app.input.as_str())
             .block(input_block)
-            .style(Style::default().fg(Color::White));
+            .style(
+                Style::default()
+                    .fg(Color::Reset)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .alignment(ratatui::layout::Alignment::Center);
 
         f.render_widget(input_text, area);
     }
@@ -128,11 +244,28 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         f.render_widget(Clear, area);
 
         let confirm_block = Block::default()
-            .title(" Confirm Delete ")
+            .title(" Delete Note ")
             .borders(Borders::ALL)
-            .style(Style::default().bg(Color::Red).fg(Color::White));
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(BOLD_COLOR));
 
-        let text = format!("Are you sure you want to delete this note?\n\n(y)es / (n)o");
+        let text = vec![
+            Line::from(vec![
+                Span::raw("Are you sure you want to "),
+                Span::styled(
+                    "DELETE",
+                    Style::default().fg(BOLD_COLOR).add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" this note?"),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("(y)es", Style::default().fg(Color::Rgb(166, 227, 161))),
+                Span::raw(" / "),
+                Span::styled("(n)o", Style::default().fg(BOLD_COLOR)),
+            ]),
+        ];
+
         let confirm_text = Paragraph::new(text)
             .block(confirm_block)
             .alignment(ratatui::layout::Alignment::Center)
@@ -142,6 +275,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     }
 }
 
+// Helper to center popups
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -169,3 +303,4 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 
     layout[1]
 }
+
