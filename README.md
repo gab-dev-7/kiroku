@@ -1,10 +1,10 @@
-# kiroku
+# kiroku-tui
 
 **kiroku** (記録) — _Japanese for "record", "document", or "archive"._
 
 A simple, terminal-based personal journaling and note-taking tool written in Rust.
 
-kiroku helps you manage a collection of markdown notes directly from your terminal. It stores your notes in `~/kiroku` and integrates with Git for easy synchronization.
+kiroku-tui helps you manage a collection of markdown notes directly from your terminal. It stores your notes in `~/kiroku` and integrates with Git for easy synchronization.
 
 ## Features
 
@@ -19,20 +19,16 @@ kiroku helps you manage a collection of markdown notes directly from your termin
 
 Ensure you have [Rust and Cargo](https://rustup.rs/) installed.
 
-### From Git (Recommended for users)
+### From Crates.io (Recommended)
 
-You can install `kiroku` directly from the repository:
+```bash
+cargo install kiroku-tui
+```
+
+### From Git
 
 ```bash
 cargo install --git https://github.com/gab-dev-7/kiroku
-```
-
-### From Source (For development)
-
-If you have cloned the repository, you can install it locally:
-
-```bash
-cargo install --path .
 ```
 
 ## Usage
@@ -40,7 +36,7 @@ cargo install --path .
 Run the application:
 
 ```bash
-kiroku
+kiroku-tui
 ```
 
 On the first run, it will create a `~/kiroku` directory. You can initialize a git repository there if you want to use the sync feature:
