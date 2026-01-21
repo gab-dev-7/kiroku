@@ -8,7 +8,11 @@ use std::io;
 use std::path::PathBuf;
 use std::process::Command;
 
-pub fn open_editor(base_path: &PathBuf, file_path: Option<&PathBuf>, editor_cmd: Option<&str>) -> Result<(), KirokuError> {
+pub fn open_editor(
+    base_path: &PathBuf,
+    file_path: Option<&PathBuf>,
+    editor_cmd: Option<&str>,
+) -> Result<(), KirokuError> {
     execute!(io::stdout(), LeaveAlternateScreen)?;
 
     let editor = if let Some(cmd) = editor_cmd {
