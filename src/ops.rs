@@ -1,7 +1,7 @@
 use crate::errors::KirokuError;
 use crossterm::{
     execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use std::fs;
 use std::io;
@@ -13,6 +13,7 @@ pub fn open_editor(
     file_path: Option<&PathBuf>,
     editor_cmd: Option<&str>,
 ) -> Result<(), KirokuError> {
+    disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen)?;
 
     let editor = if let Some(cmd) = editor_cmd {
@@ -31,6 +32,7 @@ pub fn open_editor(
     let status = cmd.status().map_err(|e| KirokuError::Io(e))?;
 
     execute!(io::stdout(), EnterAlternateScreen)?;
+    enable_raw_mode()?;
 
     if !status.success() {
         return Err(KirokuError::Env(
