@@ -11,6 +11,7 @@ pub struct Note {
     pub title: String,
     pub content: Option<String>,
     pub last_modified: SystemTime,
+    pub size: u64,
 }
 
 impl Note {
@@ -29,6 +30,7 @@ impl Note {
             title,
             content: None,
             last_modified: metadata.modified().unwrap_or(SystemTime::now()),
+            size: metadata.len(),
         })
     }
 }
@@ -55,4 +57,52 @@ pub fn load_notes(directory: &str) -> Result<Vec<Note>> {
 
     notes.sort_by(|a, b| b.last_modified.cmp(&a.last_modified));
     Ok(notes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_note_from_path() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let file_path = temp_dir.path().join("test_note.md");
+
+        let mut file = File::create(&file_path)?;
+        writeln!(file, "# Test Content")?;
+
+        let note = Note::from_path(file_path.clone())?;
+
+        assert_eq!(note.title, "test_note");
+        assert_eq!(note.path, file_path);
+        assert_eq!(note.content, None);
+        assert!(note.size > 0);
+
+        // Test reading content
+        let content = read_note_content(&note.path)?;
+        assert_eq!(content, "# Test Content\n");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_notes() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let dir_path = temp_dir.path();
+
+        File::create(dir_path.join("a.md"))?;
+        File::create(dir_path.join("b.md"))?;
+        File::create(dir_path.join("ignore_me.txt"))?;
+
+        let notes = load_notes(dir_path.to_str().unwrap())?;
+
+        assert_eq!(notes.len(), 2);
+        assert!(notes.iter().any(|n| n.title == "a"));
+        assert!(notes.iter().any(|n| n.title == "b"));
+
+        Ok(())
+    }
 }
