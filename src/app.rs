@@ -32,6 +32,7 @@ pub enum InputMode {
     Search,
 }
 
+// main application state
 pub struct App {
     pub notes: Vec<Note>,
     pub all_notes: Vec<Note>,
@@ -51,6 +52,7 @@ pub struct App {
 }
 
 impl App {
+    // initialize application state
     pub fn new(notes: Vec<Note>, base_path: PathBuf, config: Config) -> App {
         let state = ListState::default();
         let all_notes = notes.clone();
@@ -90,6 +92,7 @@ impl App {
         app
     }
 
+    // filter notes list based on fuzzy search query
     pub fn update_search(&mut self) {
         if self.search_query.is_empty() {
             self.notes = self.all_notes.clone();
@@ -118,6 +121,7 @@ impl App {
         }
     }
 
+    // load file content into memory with lru cache eviction
     pub fn load_note_content(&mut self, index: usize) {
         if index >= self.notes.len() {
             return;
@@ -191,6 +195,7 @@ impl App {
         self.should_quit = true;
     }
 
+    // process keyboard input based on current mode
     pub fn handle_input(&mut self, key: KeyEvent) -> Action {
         match self.input_mode {
             InputMode::Normal => match key.code {
