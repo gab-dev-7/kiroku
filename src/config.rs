@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde::Deserialize;
 use std::fs;
 
+// application configuration options
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub editor_cmd: Option<String>,
@@ -18,6 +19,7 @@ impl Default for Config {
     }
 }
 
+// load configuration from standard location or return defaults
 pub fn load_config() -> Result<Config> {
     let home_dir =
         dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
