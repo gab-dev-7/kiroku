@@ -31,12 +31,14 @@ cargo install kiroku-tui
 cargo install --git https://github.com/gab-dev-7/kiroku
 ```
 
+> **Note:** After installation, ensure that `~/.cargo/bin` is in your `PATH` environment variable to run `kiroku` from any directory.
+
 ## Usage
 
 Run the application:
 
 ```bash
-kiroku-tui
+kiroku
 ```
 
 On the first run, it will create a `~/kiroku` directory. You can initialize a git repository there if you want to use the sync feature:
