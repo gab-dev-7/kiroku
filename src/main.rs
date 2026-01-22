@@ -8,6 +8,7 @@ use notify::{RecursiveMode, Watcher};
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::fs;
 use std::io;
+use std::path::PathBuf;
 
 mod app;
 mod config;
@@ -20,21 +21,28 @@ mod ui;
 use app::{Action, App};
 use events::{AppEvent, EventHandler};
 
+// main entry point for the application
 fn main() -> Result<()> {
     tui_logger::init_logger(log::LevelFilter::Info).unwrap();
     tui_logger::set_default_level(log::LevelFilter::Info);
 
-    // Setup directory
-    let home_dir =
-        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("could not find home directory"))?;
-    let kiroku_path = home_dir.join("kiroku");
+    // setup directory, using cli argument or default home path
+    let args: Vec<String> = std::env::args().collect();
+    let kiroku_path = if args.len() > 1 {
+        PathBuf::from(&args[1])
+    } else {
+        let home_dir =
+            dirs::home_dir().ok_or_else(|| anyhow::anyhow!("could not find home directory"))?;
+        home_dir.join("kiroku")
+    };
 
+    // create kiroku directory if it does not exist
     if !kiroku_path.exists() {
         fs::create_dir_all(&kiroku_path)?;
         println!("created new notebook directory at {:?}", kiroku_path);
     }
 
-    // Load config
+    // load config from default location
     let config = match config::load_config() {
         Ok(c) => c,
         Err(e) => {
@@ -43,14 +51,14 @@ fn main() -> Result<()> {
         }
     };
 
-    // Setup terminal
+    // setup terminal in raw mode
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Load initial data
+    // load initial data from notes directory
     let path_str = kiroku_path.to_string_lossy().to_string();
     let notes = match data::load_notes(&path_str) {
         Ok(n) => n,
@@ -61,10 +69,10 @@ fn main() -> Result<()> {
     };
     let mut app = App::new(notes, kiroku_path.clone(), config);
 
-    // Setup events
+    // setup event handler in a separate thread
     let events = EventHandler::new(250);
 
-    // Setup file watcher
+    // setup file watcher to detect changes in notes directory
     let tx = events.sender.clone();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         if let Ok(event) = res {
@@ -75,6 +83,7 @@ fn main() -> Result<()> {
     })?;
     watcher.watch(&kiroku_path, RecursiveMode::NonRecursive)?;
 
+    // main application loop
     while !app.should_quit {
         terminal.draw(|f| ui::ui(f, &mut app))?;
 
@@ -89,16 +98,44 @@ fn main() -> Result<()> {
                     Action::Sync => {
                         if !app.syncing {
                             app.syncing = true;
-                            app.status_msg = String::from("syncing...");
 
-                            let tx = events.sender.clone();
-                            let base_path = app.base_path.clone();
+                            events.pause();
+                            std::thread::sleep(std::time::Duration::from_millis(300));
 
-                            std::thread::spawn(move || {
-                                let result =
-                                    ops::run_git_sync(&base_path).map_err(|e| e.to_string());
-                                let _ = tx.send(AppEvent::SyncFinished(result));
-                            });
+                            // suspend tui to allow interactive shell commands
+                            let _ = disable_raw_mode();
+                            let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+                            let _ = terminal.show_cursor();
+
+                            use std::io::Write;
+                            let _ = io::stdout().flush();
+
+                            println!("Syncing with git...");
+                            println!("Repository path: {:?}", app.base_path);
+                            println!("(If prompted for password, input will be hidden)");
+
+                            // run git sync synchronously
+                            let result =
+                                ops::run_git_sync(&app.base_path).map_err(|e| e.to_string());
+
+                            let _ = execute!(terminal.backend_mut(), EnterAlternateScreen);
+                            let _ = enable_raw_mode();
+                            let _ = terminal.clear();
+
+                            events.resume();
+
+                            app.syncing = false;
+
+                            match result {
+                                Ok(msg) => {
+                                    log::info!("Sync successful: {}", msg);
+                                    app.status_msg = msg;
+                                }
+                                Err(e) => {
+                                    log::error!("Sync failed: {}", e);
+                                    app.status_msg = format!("Sync error: {}", e);
+                                }
+                            }
                         }
                     }
                     Action::NewNote => {
@@ -173,7 +210,6 @@ fn main() -> Result<()> {
                                     log::error!("Failed to open editor for {:?}: {}", path, e);
                                     app.status_msg = format!("Editor error: {}", e);
                                 } else {
-                                    // notify will handle reloading
                                     terminal.clear()?;
                                 }
                             }
@@ -238,19 +274,6 @@ fn main() -> Result<()> {
                     Action::None => {}
                 }
             }
-            AppEvent::SyncFinished(result) => {
-                app.syncing = false;
-                match result {
-                    Ok(msg) => {
-                        log::info!("Sync successful: {}", msg);
-                        app.status_msg = msg;
-                    }
-                    Err(e) => {
-                        log::error!("Sync failed: {}", e);
-                        app.status_msg = format!("Sync error: {}", e);
-                    }
-                }
-            }
             AppEvent::Tick => {
                 app.tick();
             }
@@ -264,7 +287,7 @@ fn main() -> Result<()> {
         }
     }
 
-    // Teardown
+    // teardown: restore terminal state
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;

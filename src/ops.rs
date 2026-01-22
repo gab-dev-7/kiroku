@@ -8,11 +8,13 @@ use std::io;
 use std::path::PathBuf;
 use std::process::Command;
 
+// open the user's preferred editor for the given file
 pub fn open_editor(
     base_path: &PathBuf,
     file_path: Option<&PathBuf>,
     editor_cmd: Option<&str>,
 ) -> Result<(), KirokuError> {
+    // temporarily disable raw mode to allow the editor to take over the terminal
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen)?;
 
@@ -31,6 +33,7 @@ pub fn open_editor(
 
     let status = cmd.status().map_err(|e| KirokuError::Io(e))?;
 
+    // restore raw mode after editor exits
     execute!(io::stdout(), EnterAlternateScreen)?;
     enable_raw_mode()?;
 
@@ -43,6 +46,7 @@ pub fn open_editor(
     Ok(())
 }
 
+// create a new markdown file with the given filename
 pub fn create_note(base_path: &PathBuf, filename: &str) -> Result<PathBuf, KirokuError> {
     let mut safe_filename = filename.trim().replace(" ", "_");
     if !safe_filename.ends_with(".md") {
@@ -62,42 +66,47 @@ pub fn create_note(base_path: &PathBuf, filename: &str) -> Result<PathBuf, Kirok
     Ok(path)
 }
 
+// permanently delete the specified note file
 pub fn delete_note(path: &PathBuf) -> Result<(), KirokuError> {
     fs::remove_file(path)?;
     Ok(())
 }
 
+// sync changes with the remote git repository
 pub fn run_git_sync(base_path: &PathBuf) -> Result<String, KirokuError> {
+    println!("Executing git sync in: {:?}", base_path);
     if !base_path.join(".git").exists() {
         return Err(KirokuError::Git(
             "not a git repo (run 'git init' in folder)".to_string(),
         ));
     }
 
+    // stage all changes
     let add = Command::new("git")
         .arg("add")
         .arg(".")
         .current_dir(base_path)
-        .output()?;
+        .status()?;
 
-    if !add.status.success() {
+    if !add.success() {
         return Err(KirokuError::Git("git add failed".to_string()));
     }
 
+    // commit changes with a default message
     let _commit = Command::new("git")
         .args(["commit", "-m", "auto-sync from kiroku"])
         .current_dir(base_path)
-        .output()?;
+        .status()?;
 
+    // push changes to remote, allowing interactive auth if needed
     let push = Command::new("git")
         .arg("push")
         .current_dir(base_path)
-        .output()?;
+        .status()?;
 
-    if push.status.success() {
+    if push.success() {
         Ok("synced!".to_string())
     } else {
-        let stderr = String::from_utf8_lossy(&push.stderr);
-        Err(KirokuError::Git(format!("push failed: {}", stderr)))
+        Err(KirokuError::Git("push failed".to_string()))
     }
 }
