@@ -15,6 +15,7 @@ const DIM_COLOR: Color = Color::Rgb(108, 112, 134);
 const HEADER_COLOR: Color = Color::Rgb(137, 180, 250);
 const BOLD_COLOR: Color = Color::Rgb(243, 139, 168);
 
+// renders the main tui interface
 pub fn ui(f: &mut Frame, app: &mut App) {
     let constraints = if app.show_logs {
         vec![
@@ -275,7 +276,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     }
 }
 
-// Helper to center popups
+// helper to center popups
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)

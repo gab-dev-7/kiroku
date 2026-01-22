@@ -1,6 +1,7 @@
 use std::io;
 use thiserror::Error;
 
+// custom error types for the application
 #[derive(Error, Debug)]
 pub enum KirokuError {
     #[error("IO error: {0}")]
