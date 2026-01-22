@@ -9,6 +9,10 @@ readme = "README.md"
 keywords = ["tui", "journal", "notes", "cli", "productivity"]
 categories = ["command-line-utilities", "text-processing"]
 
+[[bin]]
+name = "kiroku"
+path = "src/main.rs"
+
 [dependencies]
 chrono = "0.4.43"
 crossterm = "0.29.0"
