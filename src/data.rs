@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
+// represents a single markdown note file
 #[derive(Debug, Clone)]
 pub struct Note {
     pub path: PathBuf,
@@ -15,6 +16,7 @@ pub struct Note {
 }
 
 impl Note {
+    // create a note object from a file path
     pub fn from_path(path: PathBuf) -> Result<Self> {
         let metadata = fs::metadata(&path)
             .with_context(|| format!("Failed to get metadata for: {:?}", path))?;
@@ -35,10 +37,12 @@ impl Note {
     }
 }
 
+// read the full text content of a note file
 pub fn read_note_content(path: &PathBuf) -> Result<String> {
     fs::read_to_string(path).with_context(|| format!("Failed to read file: {:?}", path))
 }
 
+// scan directory and return a list of markdown notes sorted by modification date
 pub fn load_notes(directory: &str) -> Result<Vec<Note>> {
     let mut notes = Vec::new();
 
