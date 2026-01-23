@@ -75,6 +75,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
                 let lines: Vec<Line> = content
                     .lines()
+                    .take(100)
                     .map(|line| {
                         if line.starts_with("# ") {
                             Line::from(Span::styled(
