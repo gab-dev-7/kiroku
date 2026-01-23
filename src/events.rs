@@ -41,8 +41,7 @@ impl EventHandler {
                             break;
                         }
                     }
-                }
-                if tx_input.send(AppEvent::Tick).is_err() {
+                } else if tx_input.send(AppEvent::Tick).is_err() {
                     break;
                 }
             }
