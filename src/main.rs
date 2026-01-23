@@ -162,6 +162,7 @@ fn main() -> Result<()> {
                             if !app.input.trim().is_empty() {
                                 match ops::create_note(&app.base_path, &app.input) {
                                     Ok(path) => {
+                                        events.pause();
                                         if let Err(e) = ops::open_editor(
                                             &app.base_path,
                                             Some(&path),
@@ -169,6 +170,7 @@ fn main() -> Result<()> {
                                         ) {
                                             log::error!("Failed to open editor: {}", e);
                                         }
+                                        events.resume();
                                         app.input_mode = app::InputMode::Normal;
                                         app.status_msg = String::from("Note created.");
                                         terminal.clear()?;
@@ -202,6 +204,7 @@ fn main() -> Result<()> {
                         if let Some(i) = app.list_state.selected() {
                             if i < app.notes.len() {
                                 let path = app.notes[i].path.clone();
+                                events.pause();
                                 if let Err(e) = ops::open_editor(
                                     &app.base_path,
                                     Some(&path),
@@ -212,6 +215,7 @@ fn main() -> Result<()> {
                                 } else {
                                     terminal.clear()?;
                                 }
+                                events.resume();
                             }
                         }
                     }
