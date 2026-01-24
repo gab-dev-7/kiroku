@@ -275,6 +275,12 @@ fn main() -> Result<()> {
                             }
                         }
                     }
+                    Action::ScrollUp => {
+                        app.preview_scroll = app.preview_scroll.saturating_sub(1);
+                    }
+                    Action::ScrollDown => {
+                        app.preview_scroll = app.preview_scroll.saturating_add(1);
+                    }
                     Action::None => {}
                 }
             }

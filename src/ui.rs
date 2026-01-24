@@ -75,7 +75,6 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
                 let lines: Vec<Line> = content
                     .lines()
-                    .take(100)
                     .map(|line| {
                         if line.starts_with("# ") {
                             Line::from(Span::styled(
@@ -146,6 +145,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(ACCENT_COLOR)),
         )
+        .scroll((app.preview_scroll, 0))
         .wrap(Wrap { trim: false });
 
     f.render_widget(preview, preview_chunks[0]);

@@ -22,6 +22,8 @@ pub enum Action {
     Backspace,
     SubmitInput,
     CancelInput,
+    ScrollUp,
+    ScrollDown,
 }
 
 #[derive(PartialEq)]
@@ -49,6 +51,7 @@ pub struct App {
     pub syncing: bool,
     pub spinner_index: usize,
     pub clipboard: Option<Clipboard>,
+    pub preview_scroll: u16,
 }
 
 impl App {
@@ -83,6 +86,7 @@ impl App {
             syncing: false,
             spinner_index: 0,
             clipboard,
+            preview_scroll: 0,
         };
 
         if !app.notes.is_empty() {
@@ -168,6 +172,7 @@ impl App {
         };
         self.list_state.select(Some(i));
         self.load_note_content(i);
+        self.preview_scroll = 0;
     }
 
     pub fn previous(&mut self) {
@@ -183,6 +188,7 @@ impl App {
         };
         self.list_state.select(Some(i));
         self.load_note_content(i);
+        self.preview_scroll = 0;
     }
 
     pub fn tick(&mut self) {
@@ -200,6 +206,12 @@ impl App {
         match self.input_mode {
             InputMode::Normal => match key.code {
                 KeyCode::Char('q') => Action::Quit,
+                KeyCode::Char('j') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                    Action::ScrollDown
+                }
+                KeyCode::Char('k') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                    Action::ScrollUp
+                }
                 KeyCode::Char('j') => {
                     self.next();
                     Action::None
