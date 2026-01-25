@@ -5,12 +5,12 @@ use crossterm::{
 };
 use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 // open the user's preferred editor for the given file
 pub fn open_editor(
-    base_path: &PathBuf,
+    base_path: &Path,
     file_path: Option<&PathBuf>,
     editor_cmd: Option<&str>,
 ) -> Result<(), KirokuError> {
@@ -31,7 +31,7 @@ pub fn open_editor(
         cmd.arg(path);
     }
 
-    let status = cmd.status().map_err(|e| KirokuError::Io(e))?;
+    let status = cmd.status().map_err(KirokuError::Io)?;
 
     // restore raw mode after editor exits
     execute!(io::stdout(), EnterAlternateScreen)?;
@@ -47,7 +47,7 @@ pub fn open_editor(
 }
 
 // create a new markdown file with the given filename
-pub fn create_note(base_path: &PathBuf, filename: &str) -> Result<PathBuf, KirokuError> {
+pub fn create_note(base_path: &Path, filename: &str) -> Result<PathBuf, KirokuError> {
     let mut safe_filename = filename.trim().replace(" ", "_");
     if !safe_filename.ends_with(".md") {
         safe_filename.push_str(".md");
@@ -67,13 +67,13 @@ pub fn create_note(base_path: &PathBuf, filename: &str) -> Result<PathBuf, Kirok
 }
 
 // permanently delete the specified note file
-pub fn delete_note(path: &PathBuf) -> Result<(), KirokuError> {
+pub fn delete_note(path: &Path) -> Result<(), KirokuError> {
     fs::remove_file(path)?;
     Ok(())
 }
 
 // sync changes with the remote git repository
-pub fn run_git_sync(base_path: &PathBuf) -> Result<String, KirokuError> {
+pub fn run_git_sync(base_path: &Path) -> Result<String, KirokuError> {
     println!("Executing git sync in: {:?}", base_path);
     if !base_path.join(".git").exists() {
         return Err(KirokuError::Git(
