@@ -36,10 +36,10 @@ impl EventHandler {
                 }
 
                 if event::poll(tick_rate).unwrap_or(false) {
-                    if let Event::Key(key) = event::read().unwrap() {
-                        if tx_input.send(AppEvent::Input(key)).is_err() {
-                            break;
-                        }
+                    if let Event::Key(key) = event::read().unwrap()
+                        && tx_input.send(AppEvent::Input(key)).is_err()
+                    {
+                        break;
                     }
                 } else if tx_input.send(AppEvent::Tick).is_err() {
                     break;
