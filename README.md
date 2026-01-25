@@ -55,10 +55,11 @@ git init
 
 - `n`: Create a new note
 - `Enter`: Edit the selected note
-- `d`: Delete the selected note
+- `d`: Delete the selected note (prompts for confirmation)
 - `g`: Sync with Git (add, commit, push)
 - `/`: Enter search mode
 - `j` / `k`: Navigate up/down
+- `Ctrl+j` / `Ctrl+k`: Scroll preview pane up/down
 - `y`: Copy note content to clipboard
 - `Y`: Copy note file path to clipboard
 - `q`: Quit
@@ -83,5 +84,13 @@ editor_cmd = "nvim"
 
 # Auto-sync is currently reserved for future use
 auto_sync = false
+
+# Optional: Customize the color theme (hex codes)
+[theme]
+accent = "#89dceb"    # Key UI elements
+selection = "#bb9af7" # Selected item
+header = "#89b4fa"    # List headers
+dim = "#6c7086"       # Metadata/dates
+bold = "#f38ba8"      # Emphasized text
 ```
 
