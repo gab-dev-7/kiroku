@@ -9,12 +9,6 @@ use ratatui::{
 };
 use tui_logger::TuiLoggerWidget;
 
-const ACCENT_COLOR: Color = Color::Rgb(137, 220, 235);
-const SELECTION_COLOR: Color = Color::Rgb(187, 154, 247);
-const DIM_COLOR: Color = Color::Rgb(108, 112, 134);
-const HEADER_COLOR: Color = Color::Rgb(137, 180, 250);
-const BOLD_COLOR: Color = Color::Rgb(243, 139, 168);
-
 // renders the main tui interface
 pub fn ui(f: &mut Frame, app: &mut App) {
     let constraints = if app.show_logs {
@@ -54,11 +48,11 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 .title_style(Style::default().add_modifier(Modifier::BOLD))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(ACCENT_COLOR)),
+                .border_style(Style::default().fg(app.theme.accent)),
         )
         .highlight_style(
             Style::default()
-                .bg(SELECTION_COLOR)
+                .bg(app.theme.selection)
                 .fg(Color::Black)
                 .add_modifier(Modifier::BOLD),
         )
@@ -80,28 +74,28 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                             Line::from(Span::styled(
                                 line,
                                 Style::default()
-                                    .fg(HEADER_COLOR)
+                                    .fg(app.theme.header)
                                     .add_modifier(Modifier::BOLD),
                             ))
                         } else if line.starts_with("## ") {
                             Line::from(Span::styled(
                                 line,
                                 Style::default()
-                                    .fg(ACCENT_COLOR)
+                                    .fg(app.theme.accent)
                                     .add_modifier(Modifier::BOLD),
                             ))
                         } else if line.starts_with("### ") {
                             Line::from(Span::styled(
                                 line,
                                 Style::default()
-                                    .fg(SELECTION_COLOR)
+                                    .fg(app.theme.selection)
                                     .add_modifier(Modifier::BOLD),
                             ))
                         } else if line.starts_with(
                             "`
 ```",
                         ) {
-                            Line::from(Span::styled(line, Style::default().fg(DIM_COLOR)))
+                            Line::from(Span::styled(line, Style::default().fg(app.theme.dim)))
                         } else if line.starts_with("> ") {
                             Line::from(Span::styled(
                                 line,
@@ -143,7 +137,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 .title_style(Style::default().add_modifier(Modifier::BOLD))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(ACCENT_COLOR)),
+                .border_style(Style::default().fg(app.theme.accent)),
         )
         .scroll((app.preview_scroll, 0))
         .wrap(Wrap { trim: false });
@@ -154,11 +148,11 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         let footer_block = Block::default()
             .borders(Borders::TOP)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(DIM_COLOR));
+            .border_style(Style::default().fg(app.theme.dim));
 
         let footer = Paragraph::new(preview_footer)
             .block(footer_block)
-            .style(Style::default().fg(DIM_COLOR))
+            .style(Style::default().fg(app.theme.dim))
             .alignment(ratatui::layout::Alignment::Right);
         f.render_widget(footer, preview_chunks[1]);
     }
@@ -171,7 +165,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                     .title(" System Logs ")
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
-                    .border_style(Style::default().fg(SELECTION_COLOR)),
+                    .border_style(Style::default().fg(app.theme.selection)),
             )
             .output_separator('|')
             .output_timestamp(Some("%H:%M:%S".to_string()))
@@ -206,13 +200,13 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     let status_block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(DIM_COLOR));
+        .border_style(Style::default().fg(app.theme.dim));
 
     let status = Paragraph::new(status_text.as_str())
         .block(status_block)
         .style(
             Style::default()
-                .fg(ACCENT_COLOR)
+                .fg(app.theme.accent)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -249,14 +243,16 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             .title(" Delete Note ")
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(BOLD_COLOR));
+            .border_style(Style::default().fg(app.theme.bold));
 
         let text = vec![
             Line::from(vec![
                 Span::raw("Are you sure you want to "),
                 Span::styled(
                     "DELETE",
-                    Style::default().fg(BOLD_COLOR).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(app.theme.bold)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::raw(" this note?"),
             ]),
@@ -264,7 +260,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             Line::from(vec![
                 Span::styled("(y)es", Style::default().fg(Color::Rgb(166, 227, 161))),
                 Span::raw(" / "),
-                Span::styled("(n)o", Style::default().fg(BOLD_COLOR)),
+                Span::styled("(n)o", Style::default().fg(app.theme.bold)),
             ]),
         ];
 
