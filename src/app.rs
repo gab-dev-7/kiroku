@@ -4,9 +4,30 @@ use arboard::Clipboard;
 use crossterm::event::{KeyCode, KeyEvent};
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+use ratatui::style::Color;
 use ratatui::widgets::ListState;
 use std::collections::VecDeque;
 use std::path::PathBuf;
+
+pub struct ThemeColors {
+    pub accent: Color,
+    pub selection: Color,
+    pub header: Color,
+    pub dim: Color,
+    pub bold: Color,
+}
+
+impl Default for ThemeColors {
+    fn default() -> Self {
+        Self {
+            accent: Color::Rgb(137, 220, 235),
+            selection: Color::Rgb(187, 154, 247),
+            dim: Color::Rgb(108, 112, 134),
+            header: Color::Rgb(137, 180, 250),
+            bold: Color::Rgb(243, 139, 168),
+        }
+    }
+}
 
 pub enum Action {
     None,
@@ -52,6 +73,7 @@ pub struct App {
     pub spinner_index: usize,
     pub clipboard: Option<Clipboard>,
     pub preview_scroll: u16,
+    pub theme: ThemeColors,
 }
 
 impl App {
@@ -76,7 +98,7 @@ impl App {
                 " 'n' for new note, 'enter' to edit, 'g' to sync, 'd' to delete, '/' to search",
             ),
             base_path,
-            config,
+            config: config.clone(),
             should_quit: false,
             show_logs: false,
             recent_indices: VecDeque::with_capacity(10),
@@ -87,7 +109,31 @@ impl App {
             spinner_index: 0,
             clipboard,
             preview_scroll: 0,
+            theme: ThemeColors::default(),
         };
+
+        if let Some(user_theme) = &config.theme {
+            let parse = |s: &Option<String>, fallback: Color| -> Color {
+                if let Some(hex) = s
+                    && hex.starts_with('#')
+                    && hex.len() == 7
+                    && let (Ok(r), Ok(g), Ok(b)) = (
+                        u8::from_str_radix(&hex[1..3], 16),
+                        u8::from_str_radix(&hex[3..5], 16),
+                        u8::from_str_radix(&hex[5..7], 16),
+                    )
+                {
+                    return Color::Rgb(r, g, b);
+                }
+                fallback
+            };
+
+            app.theme.accent = parse(&user_theme.accent, app.theme.accent);
+            app.theme.selection = parse(&user_theme.selection, app.theme.selection);
+            app.theme.header = parse(&user_theme.header, app.theme.header);
+            app.theme.dim = parse(&user_theme.dim, app.theme.dim);
+            app.theme.bold = parse(&user_theme.bold, app.theme.bold);
+        }
 
         if !app.notes.is_empty() {
             app.list_state.select(Some(0));
@@ -137,14 +183,14 @@ impl App {
                     self.notes[index].content = Some(content);
                     // Add to cache
                     self.recent_indices.push_back(index);
-                    if self.recent_indices.len() > 10 {
-                        if let Some(old_idx) = self.recent_indices.pop_front() {
-                            // Don't clear if it's currently selected or still in recent list
-                            if Some(old_idx) != self.list_state.selected()
-                                && !self.recent_indices.contains(&old_idx)
-                            {
-                                self.notes[old_idx].content = None;
-                            }
+                    if self.recent_indices.len() > 10
+                        && let Some(old_idx) = self.recent_indices.pop_front()
+                    {
+                        // Don't clear if it's currently selected or still in recent list
+                        if Some(old_idx) != self.list_state.selected()
+                            && !self.recent_indices.contains(&old_idx)
+                        {
+                            self.notes[old_idx].content = None;
                         }
                     }
                 }
@@ -206,10 +252,18 @@ impl App {
         match self.input_mode {
             InputMode::Normal => match key.code {
                 KeyCode::Char('q') => Action::Quit,
-                KeyCode::Char('j') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                KeyCode::Char('j')
+                    if key
+                        .modifiers
+                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                {
                     Action::ScrollDown
                 }
-                KeyCode::Char('k') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                KeyCode::Char('k')
+                    if key
+                        .modifiers
+                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                {
                     Action::ScrollUp
                 }
                 KeyCode::Char('j') => {
