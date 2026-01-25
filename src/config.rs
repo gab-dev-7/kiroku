@@ -6,8 +6,17 @@ use std::fs;
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub editor_cmd: Option<String>,
-    #[allow(dead_code)]
     pub auto_sync: Option<bool>,
+    pub theme: Option<Theme>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Theme {
+    pub accent: Option<String>,
+    pub selection: Option<String>,
+    pub header: Option<String>,
+    pub dim: Option<String>,
+    pub bold: Option<String>,
 }
 
 impl Default for Config {
@@ -15,9 +24,30 @@ impl Default for Config {
         Self {
             editor_cmd: None,
             auto_sync: Some(false),
+            theme: None,
         }
     }
 }
+
+const DEFAULT_CONFIG: &str = r##"# Kiroku Configuration
+
+# Optional: Command to open your text editor.
+# Examples: "vim", "nano", "code --wait", "nvim"
+# editor_cmd = "vim"
+
+# Optional: Automatically sync with git when exiting the application.
+# Default is false.
+auto_sync = false
+
+# Optional: Custom Color Theme
+# You can uncomment and customize these hex codes.
+# [theme]
+# accent = "#89dceb"    # Borders and main highlights
+# selection = "#bb9af7" # Selected item in the list
+# header = "#89b4fa"    # Markdown headers
+# dim = "#6c7086"       # Footer and dim text
+# bold = "#f38ba8"      # Bold text and heavy emphasis
+"##;
 
 // load configuration from standard location or return defaults
 pub fn load_config() -> Result<Config> {
@@ -26,6 +56,10 @@ pub fn load_config() -> Result<Config> {
     let config_path = home_dir.join(".config").join("kiroku").join("config.toml");
 
     if !config_path.exists() {
+        if let Some(parent) = config_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&config_path, DEFAULT_CONFIG)?;
         return Ok(Config::default());
     }
 
