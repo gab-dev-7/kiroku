@@ -62,4 +62,3 @@ pub fn load_notes(directory: &str) -> Result<Vec<Note>> {
     notes.sort_by(|a, b| b.last_modified.cmp(&a.last_modified));
     Ok(notes)
 }
-
