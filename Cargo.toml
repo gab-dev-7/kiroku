@@ -1,6 +1,6 @@
 [package]
 name = "kiroku-tui"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 description = "A simple, terminal-based personal journaling and note-taking tool."
 repository = "https://github.com/gab-dev-7/kiroku"
