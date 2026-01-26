@@ -45,6 +45,32 @@ pub enum Action {
     CancelInput,
     ScrollUp,
     ScrollDown,
+    CycleSort,
+}
+
+#[derive(PartialEq, Clone, Copy)]
+pub enum SortMode {
+    Date,
+    Name,
+    Size,
+}
+
+impl SortMode {
+    pub fn next(&self) -> Self {
+        match self {
+            SortMode::Date => SortMode::Name,
+            SortMode::Name => SortMode::Size,
+            SortMode::Size => SortMode::Date,
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            SortMode::Date => "Date",
+            SortMode::Name => "Name",
+            SortMode::Size => "Size",
+        }
+    }
 }
 
 #[derive(PartialEq)]
@@ -74,6 +100,7 @@ pub struct App {
     pub clipboard: Option<Clipboard>,
     pub preview_scroll: u16,
     pub theme: ThemeColors,
+    pub sort_mode: SortMode,
 }
 
 impl App {
@@ -88,6 +115,16 @@ impl App {
                 log::warn!("Failed to initialize clipboard: {}", e);
                 None
             }
+        };
+
+        let initial_sort = if let Some(ref s) = config.sort_mode {
+            match s.as_str() {
+                "Name" => SortMode::Name,
+                "Size" => SortMode::Size,
+                _ => SortMode::Date,
+            }
+        } else {
+            SortMode::Date
         };
 
         let mut app = App {
@@ -110,6 +147,7 @@ impl App {
             clipboard,
             preview_scroll: 0,
             theme: ThemeColors::default(),
+            sort_mode: initial_sort,
         };
 
         if let Some(user_theme) = &config.theme {
@@ -135,6 +173,9 @@ impl App {
             app.theme.bold = parse(&user_theme.bold, app.theme.bold);
         }
 
+        // Apply initial sort
+        app.sort_notes();
+
         if !app.notes.is_empty() {
             app.list_state.select(Some(0));
             app.load_note_content(0);
@@ -142,10 +183,33 @@ impl App {
         app
     }
 
+    // sort notes based on current mode
+    pub fn sort_notes(&mut self) {
+        // sort only if not in search mode
+        if !self.search_query.is_empty() {
+            return;
+        }
+
+        match self.sort_mode {
+            SortMode::Date => {
+                self.notes
+                    .sort_by(|a, b| b.last_modified.cmp(&a.last_modified));
+            }
+            SortMode::Name => {
+                self.notes
+                    .sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+            }
+            SortMode::Size => {
+                self.notes.sort_by(|a, b| b.size.cmp(&a.size));
+            }
+        }
+    }
+
     // filter notes list based on fuzzy search query
     pub fn update_search(&mut self) {
         if self.search_query.is_empty() {
             self.notes = self.all_notes.clone();
+            self.sort_notes();
         } else {
             let matcher = SkimMatcherV2::default();
             let mut matches: Vec<(&Note, i64)> = self
@@ -247,6 +311,14 @@ impl App {
         self.should_quit = true;
     }
 
+    pub fn save_config(&self) {
+        let mut config = self.config.clone();
+        config.sort_mode = Some(self.sort_mode.as_str().to_string());
+        if let Err(e) = crate::config::save_config(&config) {
+            log::error!("Failed to save config: {}", e);
+        }
+    }
+
     // process keyboard input based on current mode
     pub fn handle_input(&mut self, key: KeyEvent) -> Action {
         match self.input_mode {
@@ -277,6 +349,7 @@ impl App {
                 KeyCode::Char('g') => Action::Sync,
                 KeyCode::Char('n') => Action::NewNote,
                 KeyCode::Char('d') => Action::DeleteNote,
+                KeyCode::Char('s') => Action::CycleSort,
                 KeyCode::Char('y') => Action::CopyContent,
                 KeyCode::Char('Y') => Action::CopyPath,
                 KeyCode::Char('/') => {
