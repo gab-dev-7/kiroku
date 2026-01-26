@@ -10,6 +10,8 @@ kiroku-tui helps you manage a collection of markdown notes directly from your te
 
 - **Terminal Interface**: Clean TUI built with `ratatui`.
 - **Fuzzy Search**: Quickly find notes by title.
+- **Content Search**: Deep search within the body of your notes.
+- **Note Renaming**: Rename existing notes directly within the app.
 - **Smart Sorting**: Toggle between sorting by Date, Name, or Size.
 - **External Editor**: Opens notes in your preferred editor (Vim, Nano, VS Code, etc.).
 - **Smart Git Sync**: Built-in command to add, commit, and push changes. Skips redundant network calls if up-to-date.
@@ -58,10 +60,12 @@ git init
 
 - `n`: Create a new note
 - `Enter`: Edit the selected note
+- `r`: Rename the selected note
 - `d`: Delete the selected note (prompts for confirmation)
 - `s`: Cycle sort mode (Date, Name, Size)
 - `g`: Sync with Git (add, commit, push)
-- `/`: Enter search mode
+- `/`: Enter title search mode
+- `shift + /`: Enter content search mode
 - `j` / `k`: Navigate up/down
 - `Ctrl+j` / `Ctrl+k`: Scroll preview pane up/down
 - `y`: Copy note content to clipboard
@@ -100,4 +104,3 @@ header = "#89b4fa"    # List headers
 dim = "#6c7086"       # Metadata/dates
 bold = "#f38ba8"      # Emphasized text
 ```
-
