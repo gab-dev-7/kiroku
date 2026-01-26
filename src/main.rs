@@ -298,6 +298,11 @@ fn main() -> Result<()> {
                     Action::ScrollDown => {
                         app.preview_scroll = app.preview_scroll.saturating_add(1);
                     }
+                    Action::CycleSort => {
+                        app.sort_mode = app.sort_mode.next();
+                        app.sort_notes();
+                        app.save_config();
+                    }
                     Action::None => {}
                 }
             }
