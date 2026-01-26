@@ -10,9 +10,12 @@ kiroku-tui helps you manage a collection of markdown notes directly from your te
 
 - **Terminal Interface**: Clean TUI built with `ratatui`.
 - **Fuzzy Search**: Quickly find notes by title.
+- **Smart Sorting**: Toggle between sorting by Date, Name, or Size.
 - **External Editor**: Opens notes in your preferred editor (Vim, Nano, VS Code, etc.).
-- **Git Sync**: Built-in command to add, commit, and push changes to a remote repository.
+- **Smart Git Sync**: Built-in command to add, commit, and push changes. Skips redundant network calls if up-to-date.
 - **File Watching**: Automatically updates the list when files are changed externally.
+- **Auto-Sync on Exit**: Optional setting to automatically sync with Git when quitting.
+- **Theming**: Fully customizable color schemes.
 - **Clipboard Integration**: Copy note content or file paths directly to your clipboard.
 
 ## Installation
@@ -56,6 +59,7 @@ git init
 - `n`: Create a new note
 - `Enter`: Edit the selected note
 - `d`: Delete the selected note (prompts for confirmation)
+- `s`: Cycle sort mode (Date, Name, Size)
 - `g`: Sync with Git (add, commit, push)
 - `/`: Enter search mode
 - `j` / `k`: Navigate up/down
@@ -82,8 +86,11 @@ You can configure kiroku by creating a file at `~/.config/kiroku/config.toml`.
 # If omitted, defaults to $EDITOR environment variable or "vim".
 editor_cmd = "nvim"
 
-# Auto-sync is currently reserved for future use
+# Automatically sync with git when exiting the application.
 auto_sync = false
+
+# Default sort mode for notes ("Date", "Name", "Size").
+sort_mode = "Date"
 
 # Optional: Customize the color theme (hex codes)
 [theme]
