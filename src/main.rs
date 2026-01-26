@@ -4,22 +4,17 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use kiroku_tui::{
+    app::{Action, App, InputMode},
+    config, data,
+    events::{AppEvent, EventHandler},
+    ops, ui,
+};
 use notify::{RecursiveMode, Watcher};
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::fs;
 use std::io;
 use std::path::PathBuf;
-
-mod app;
-mod config;
-mod data;
-mod errors;
-mod events;
-mod ops;
-mod ui;
-
-use app::{Action, App};
-use events::{AppEvent, EventHandler};
 
 // main entry point for the application
 fn main() -> Result<()> {
@@ -156,15 +151,24 @@ fn main() -> Result<()> {
                         }
                     }
                     Action::NewNote => {
-                        app.input_mode = app::InputMode::Editing;
+                        app.input_mode = InputMode::Editing;
                         app.input.clear();
                         app.status_msg = String::from("Enter filename: ");
+                    }
+                    Action::RenameNote => {
+                        if let Some(i) = app.list_state.selected()
+                            && i < app.notes.len()
+                        {
+                            app.input_mode = InputMode::Renaming;
+                            app.input = app.notes[i].title.clone();
+                            app.status_msg = String::from("Rename note: ");
+                        }
                     }
                     Action::DeleteNote => {
                         if let Some(i) = app.list_state.selected()
                             && i < app.notes.len()
                         {
-                            app.input_mode = app::InputMode::ConfirmDelete;
+                            app.input_mode = InputMode::ConfirmDelete;
                             app.status_msg = format!("Delete '{}'? (y/n)", app.notes[i].title);
                         }
                     }
@@ -175,7 +179,7 @@ fn main() -> Result<()> {
                         app.input.pop();
                     }
                     Action::SubmitInput => match app.input_mode {
-                        app::InputMode::Editing => {
+                        InputMode::Editing => {
                             if !app.input.trim().is_empty() {
                                 match ops::create_note(&app.base_path, &app.input) {
                                     Ok(path) => {
@@ -188,7 +192,7 @@ fn main() -> Result<()> {
                                             log::error!("Failed to open editor: {}", e);
                                         }
                                         events.resume();
-                                        app.input_mode = app::InputMode::Normal;
+                                        app.input_mode = InputMode::Normal;
                                         app.status_msg = String::from("Note created.");
                                         terminal.clear()?;
                                     }
@@ -198,7 +202,23 @@ fn main() -> Result<()> {
                                 }
                             }
                         }
-                        app::InputMode::ConfirmDelete => {
+                        InputMode::Renaming => {
+                            if let Some(i) = app.list_state.selected()
+                                && i < app.notes.len()
+                                && !app.input.trim().is_empty()
+                            {
+                                match ops::rename_note(&app.notes[i].path, &app.input) {
+                                    Ok(_) => {
+                                        app.input_mode = InputMode::Normal;
+                                        app.status_msg = String::from("Note renamed.");
+                                    }
+                                    Err(e) => {
+                                        app.status_msg = format!("Rename error: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                        InputMode::ConfirmDelete => {
                             if let Some(i) = app.list_state.selected()
                                 && i < app.notes.len()
                             {
@@ -208,12 +228,12 @@ fn main() -> Result<()> {
                                     app.status_msg = String::from("Note deleted.");
                                 }
                             }
-                            app.input_mode = app::InputMode::Normal;
+                            app.input_mode = InputMode::Normal;
                         }
                         _ => {}
                     },
                     Action::CancelInput => {
-                        app.input_mode = app::InputMode::Normal;
+                        app.input_mode = InputMode::Normal;
                         app.input.clear();
                         app.status_msg = String::from("Cancelled.");
                     }
