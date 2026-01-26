@@ -44,7 +44,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     let list = List::new(items)
         .block(
             Block::default()
-                .title(" Notes ")
+                .title(format!(" Notes [{}] ", app.sort_mode.as_str()))
                 .title_style(Style::default().add_modifier(Modifier::BOLD))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
