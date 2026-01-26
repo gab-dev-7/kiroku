@@ -1,16 +1,17 @@
 use anyhow::Result;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 
 // application configuration options
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
     pub editor_cmd: Option<String>,
     pub auto_sync: Option<bool>,
     pub theme: Option<Theme>,
+    pub sort_mode: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Theme {
     pub accent: Option<String>,
     pub selection: Option<String>,
@@ -25,6 +26,7 @@ impl Default for Config {
             editor_cmd: None,
             auto_sync: Some(false),
             theme: None,
+            sort_mode: Some("Date".to_string()),
         }
     }
 }
@@ -38,6 +40,10 @@ const DEFAULT_CONFIG: &str = r##"# Kiroku Configuration
 # Optional: Automatically sync with git when exiting the application.
 # Default is false.
 auto_sync = false
+
+# Optional: Default sort mode for notes.
+# Options: "Date", "Name", "Size"
+# sort_mode = "Date"
 
 # Optional: Custom Color Theme
 # You can uncomment and customize these hex codes.
@@ -63,8 +69,20 @@ pub fn load_config() -> Result<Config> {
         return Ok(Config::default());
     }
 
-    let content = fs::read_to_string(config_path)?;
+    let content = fs::read_to_string(&config_path)?;
     let config: Config = toml::from_str(&content)?;
 
     Ok(config)
+}
+
+// save configuration to disk
+pub fn save_config(config: &Config) -> Result<()> {
+    let home_dir =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+    let config_path = home_dir.join(".config").join("kiroku").join("config.toml");
+
+    let content = toml::to_string_pretty(config)?;
+    fs::write(config_path, content)?;
+
+    Ok(())
 }
