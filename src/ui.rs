@@ -193,8 +193,10 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             }
         }
         InputMode::Editing => format!("{} CREATING NOTE: {}", spinner, app.status_msg),
+        InputMode::Renaming => format!("{} RENAMING NOTE: {}", spinner, app.status_msg),
         InputMode::ConfirmDelete => format!("{} DELETING NOTE: {}", spinner, app.status_msg),
         InputMode::Search => format!("{} SEARCH: {}", spinner, app.search_query),
+        InputMode::ContentSearch => format!("{} CONTENT SEARCH: {}", spinner, app.search_query),
     };
 
     let status_block = Block::default()
@@ -213,12 +215,18 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     f.render_widget(status, status_area);
 
     // Popups
-    if app.input_mode == InputMode::Editing {
+    if app.input_mode == InputMode::Editing || app.input_mode == InputMode::Renaming {
         let area = centered_rect(60, 20, f.area());
         f.render_widget(Clear, area);
 
+        let title = if app.input_mode == InputMode::Editing {
+            " New Note "
+        } else {
+            " Rename Note "
+        };
+
         let input_block = Block::default()
-            .title(" New Note ")
+            .title(title)
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Rgb(166, 227, 161)));
