@@ -72,6 +72,29 @@ pub fn delete_note(path: &Path) -> Result<(), KirokuError> {
     Ok(())
 }
 
+// rename an existing note file
+pub fn rename_note(old_path: &Path, new_filename: &str) -> Result<PathBuf, KirokuError> {
+    let mut safe_filename = new_filename.trim().replace(" ", "_");
+    if !safe_filename.ends_with(".md") {
+        safe_filename.push_str(".md");
+    }
+
+    let parent = old_path
+        .parent()
+        .ok_or_else(|| KirokuError::Env("Could not determine parent directory".into()))?;
+    let new_path = parent.join(&safe_filename);
+
+    if new_path.exists() {
+        return Err(KirokuError::Io(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "File already exists",
+        )));
+    }
+
+    fs::rename(old_path, &new_path)?;
+    Ok(new_path)
+}
+
 // sync changes with the remote git repository
 pub fn run_git_sync(base_path: &Path) -> Result<String, KirokuError> {
     println!("Executing git sync in: {:?}", base_path);
@@ -81,14 +104,14 @@ pub fn run_git_sync(base_path: &Path) -> Result<String, KirokuError> {
         ));
     }
 
-    // check for are any changes
+    // 1. Check if there are any changes (staged or unstaged)
     let status_out = Command::new("git")
         .args(["status", "--porcelain"])
         .current_dir(base_path)
         .output()?;
     let has_changes = !status_out.stdout.is_empty();
 
-    // check if ahead of the remote
+    // 2. Check if we are ahead of the remote
     let ahead_out = Command::new("git")
         .args(["rev-list", "HEAD@{u}..HEAD"])
         .current_dir(base_path)
@@ -111,15 +134,15 @@ pub fn run_git_sync(base_path: &Path) -> Result<String, KirokuError> {
             return Err(KirokuError::Git("git add failed".to_string()));
         }
 
-        // commit changes with default message
+        // commit changes with a default message
         let _commit = Command::new("git")
             .args(["commit", "-m", "auto-sync from kiroku"])
             .current_dir(base_path)
             .status()?;
     }
 
-    // push changes only if needed
-    // re-check if ahead after commit
+    // 3. Push changes to remote only if needed
+    // We re-check if ahead after commit
     let ahead_after_commit = Command::new("git")
         .args(["rev-list", "@{u}..HEAD"])
         .current_dir(base_path)
