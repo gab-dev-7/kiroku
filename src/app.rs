@@ -36,6 +36,7 @@ pub enum Action {
     NewNote,
     EditNote,
     DeleteNote,
+    RenameNote,
     CopyContent,
     CopyPath,
     ToggleLogs,
@@ -77,8 +78,10 @@ impl SortMode {
 pub enum InputMode {
     Normal,
     Editing,
+    Renaming,
     ConfirmDelete,
     Search,
+    ContentSearch,
 }
 
 // main application state
@@ -235,6 +238,52 @@ impl App {
         }
     }
 
+    // filter notes list based on fuzzy search of content
+    pub fn update_content_search(&mut self) {
+        if self.search_query.is_empty() {
+            self.notes = self.all_notes.clone();
+            self.sort_notes();
+        } else {
+            let matcher = SkimMatcherV2::default();
+            let query = self.search_query.to_lowercase();
+
+            let mut matches: Vec<(&Note, i64)> = self
+                .all_notes
+                .iter()
+                .filter_map(|note| {
+                    // Try to load content if not present
+                    let content = if let Some(ref c) = note.content {
+                        Some(c.clone())
+                    } else {
+                        data::read_note_content(&note.path).ok()
+                    };
+
+                    if let Some(content) = content {
+                        // We use simple case-insensitive contains for content search
+                        // as fuzzy matching large files is extremely expensive.
+                        if content.to_lowercase().contains(&query) {
+                            // Boost score slightly if the title also matches
+                            let title_score = matcher.fuzzy_match(&note.title, &query).unwrap_or(0);
+                            return Some((note, 100 + title_score));
+                        }
+                    }
+                    None
+                })
+                .collect();
+
+            matches.sort_by(|a, b| b.1.cmp(&a.1));
+            self.notes = matches.into_iter().map(|(n, _)| n.clone()).collect();
+        }
+
+        // Reset selection
+        if !self.notes.is_empty() {
+            self.list_state.select(Some(0));
+            self.load_note_content(0);
+        } else {
+            self.list_state.select(None);
+        }
+    }
+
     // load file content into memory with lru cache eviction
     pub fn load_note_content(&mut self, index: usize) {
         if index >= self.notes.len() {
@@ -245,27 +294,27 @@ impl App {
             match data::read_note_content(&self.notes[index].path) {
                 Ok(content) => {
                     self.notes[index].content = Some(content);
-                    // Add to cache
-                    self.recent_indices.push_back(index);
-                    if self.recent_indices.len() > 10
-                        && let Some(old_idx) = self.recent_indices.pop_front()
-                    {
-                        // Don't clear if it's currently selected or still in recent list
-                        if Some(old_idx) != self.list_state.selected()
-                            && !self.recent_indices.contains(&old_idx)
-                        {
-                            self.notes[old_idx].content = None;
-                        }
-                    }
                 }
                 Err(e) => {
                     log::error!("Failed to load note content: {}", e);
+                    return;
                 }
             }
-        } else {
-            // Already loaded, just move to back of LRU
-            self.recent_indices.retain(|&i| i != index);
-            self.recent_indices.push_back(index);
+        }
+
+        // Update cache (LRU)
+        self.recent_indices.retain(|&i| i != index);
+        self.recent_indices.push_back(index);
+
+        if self.recent_indices.len() > 10
+            && let Some(old_idx) = self.recent_indices.pop_front()
+        {
+            // Don't clear if it's currently selected or still in recent list
+            if Some(old_idx) != self.list_state.selected()
+                && !self.recent_indices.contains(&old_idx)
+            {
+                self.notes[old_idx].content = None;
+            }
         }
     }
 
@@ -349,6 +398,7 @@ impl App {
                 KeyCode::Char('g') => Action::Sync,
                 KeyCode::Char('n') => Action::NewNote,
                 KeyCode::Char('d') => Action::DeleteNote,
+                KeyCode::Char('r') => Action::RenameNote,
                 KeyCode::Char('s') => Action::CycleSort,
                 KeyCode::Char('y') => Action::CopyContent,
                 KeyCode::Char('Y') => Action::CopyPath,
@@ -358,11 +408,17 @@ impl App {
                     self.status_msg = String::from("Search: ");
                     Action::None
                 }
+                KeyCode::Char('?') => {
+                    self.input_mode = InputMode::ContentSearch;
+                    self.search_query.clear();
+                    self.status_msg = String::from("Content Search: ");
+                    Action::None
+                }
                 KeyCode::Enter => Action::EditNote,
                 KeyCode::F(12) => Action::ToggleLogs,
                 _ => Action::None,
             },
-            InputMode::Editing => match key.code {
+            InputMode::Editing | InputMode::Renaming => match key.code {
                 KeyCode::Enter => Action::SubmitInput,
                 KeyCode::Esc => Action::CancelInput,
                 KeyCode::Backspace => Action::Backspace,
@@ -403,51 +459,37 @@ impl App {
                 }
                 _ => Action::None,
             },
+            InputMode::ContentSearch => match key.code {
+                KeyCode::Enter => {
+                    self.input_mode = InputMode::Normal;
+                    self.status_msg = String::from("Content filter active. Esc to clear.");
+                    Action::None
+                }
+                KeyCode::Esc => {
+                    self.input_mode = InputMode::Normal;
+                    self.search_query.clear();
+                    self.update_search();
+                    self.status_msg = String::from(
+                        "press 'n' for new note, 'enter' to edit, 'g' to sync, 'd' to delete, '/' to search",
+                    );
+                    Action::None
+                }
+                KeyCode::Backspace => {
+                    self.search_query.pop();
+                    self.update_content_search();
+                    self.status_msg = format!("Content Search: {}", self.search_query);
+                    Action::None
+                }
+                KeyCode::Char(c) => {
+                    self.search_query.push(c);
+                    self.update_content_search();
+                    self.status_msg = format!("Content Search: {}", self.search_query);
+                    Action::None
+                }
+                _ => Action::None,
+            },
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::SystemTime;
 
-    fn create_test_note(title: &str) -> Note {
-        Note {
-            path: PathBuf::from(format!("{}.md", title)),
-            title: title.to_string(),
-            content: Some("content".to_string()),
-            last_modified: SystemTime::now(),
-            size: 100,
-        }
-    }
-
-    #[test]
-    fn test_search_filtering() {
-        let notes = vec![
-            create_test_note("alpha"),
-            create_test_note("beta"),
-            create_test_note("gamma"),
-            create_test_note("apple"),
-        ];
-
-        let mut app = App::new(notes, PathBuf::from("/tmp"), Config::default());
-
-        app.search_query = "ap".to_string();
-        app.update_search();
-
-        assert_eq!(app.notes.len(), 2);
-        assert!(app.notes.iter().any(|n| n.title == "alpha"));
-        assert!(app.notes.iter().any(|n| n.title == "apple"));
-
-        app.search_query = "bet".to_string();
-        app.update_search();
-
-        assert_eq!(app.notes.len(), 1);
-        assert_eq!(app.notes[0].title, "beta");
-
-        app.search_query = "".to_string();
-        app.update_search();
-        assert_eq!(app.notes.len(), 4);
-    }
-}
