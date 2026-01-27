@@ -65,7 +65,7 @@ git init
 - `s`: Cycle sort mode (Date, Name, Size)
 - `g`: Sync with Git (add, commit, push)
 - `/`: Enter title search mode
-- `shift + /`: Enter content search mode
+- `?`: Enter content search mode
 - `j` / `k`: Navigate up/down
 - `Ctrl+j` / `Ctrl+k`: Scroll preview pane up/down
 - `y`: Copy note content to clipboard
