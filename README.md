@@ -58,6 +58,7 @@ git init
 
 **Normal Mode**
 
+- `h`: Open help popup
 - `n`: Create a new note
 - `Enter`: Edit the selected note
 - `r`: Rename the selected note
