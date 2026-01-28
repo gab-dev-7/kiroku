@@ -18,7 +18,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             Constraint::Length(3),
         ]
     } else {
-        vec![Constraint::Min(0), Constraint::Length(3)]
+        vec![Constraint::Fill(1), Constraint::Length(3)]
     };
 
     let chunks = Layout::default()
@@ -125,37 +125,26 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             )
         };
 
-    let preview_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(1)])
-        .split(main_chunks[1]);
+    let preview_block = Block::default()
+        .title(preview_title)
+        .title_style(Style::default().add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(app.theme.accent));
+
+    let preview_block = if !preview_footer.is_empty() {
+        preview_block
+            .title_bottom(Line::from(preview_footer).alignment(ratatui::layout::Alignment::Right))
+    } else {
+        preview_block
+    };
 
     let preview = Paragraph::new(preview_content)
-        .block(
-            Block::default()
-                .title(preview_title)
-                .title_style(Style::default().add_modifier(Modifier::BOLD))
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(app.theme.accent)),
-        )
+        .block(preview_block)
         .scroll((app.preview_scroll, 0))
         .wrap(Wrap { trim: false });
 
-    f.render_widget(preview, preview_chunks[0]);
-
-    if !preview_footer.is_empty() {
-        let footer_block = Block::default()
-            .borders(Borders::TOP)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(app.theme.dim));
-
-        let footer = Paragraph::new(preview_footer)
-            .block(footer_block)
-            .style(Style::default().fg(app.theme.dim))
-            .alignment(ratatui::layout::Alignment::Right);
-        f.render_widget(footer, preview_chunks[1]);
-    }
+    f.render_widget(preview, main_chunks[1]);
 
     // Logs
     if app.show_logs {
@@ -197,6 +186,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         InputMode::ConfirmDelete => format!("{} DELETING NOTE: {}", spinner, app.status_msg),
         InputMode::Search => format!("{} SEARCH: {}", spinner, app.search_query),
         InputMode::ContentSearch => format!("{} CONTENT SEARCH: {}", spinner, app.search_query),
+        InputMode::Help => format!("{} HELP: Press Esc to close", spinner),
     };
 
     let status_block = Block::default()
@@ -278,6 +268,70 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             .wrap(Wrap { trim: true });
 
         f.render_widget(confirm_text, area);
+    }
+
+    if app.input_mode == InputMode::Help {
+        let area = centered_rect(60, 60, f.area());
+        f.render_widget(Clear, area);
+
+        let help_block = Block::default()
+            .title(" Help ")
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(app.theme.accent));
+
+        let text = vec![
+            Line::from(Span::styled(
+                "Navigation",
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from("  j / k       : Scroll list down / up"),
+            Line::from("  Ctrl+j / k  : Scroll preview down / up"),
+            Line::from("  Enter       : Edit selected note"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Actions",
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from("  n           : New note"),
+            Line::from("  r           : Rename note"),
+            Line::from("  d           : Delete note"),
+            Line::from("  g           : Sync with git"),
+            Line::from("  s           : Cycle sort mode"),
+            Line::from("  y           : Copy content to clipboard"),
+            Line::from("  Y           : Copy path to clipboard"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Search",
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from("  /           : Search notes by title"),
+            Line::from("  ?           : Search notes by content"),
+            Line::from("  Esc         : Clear search / Close popup"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "General",
+                Style::default()
+                    .fg(app.theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from("  h           : Toggle this help"),
+            Line::from("  F12         : Toggle logs"),
+            Line::from("  q           : Quit"),
+        ];
+
+        let help_text = Paragraph::new(text)
+            .block(help_block)
+            .alignment(ratatui::layout::Alignment::Left)
+            .wrap(Wrap { trim: false });
+
+        f.render_widget(help_text, area);
     }
 }
 

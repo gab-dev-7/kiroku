@@ -82,6 +82,7 @@ pub enum InputMode {
     ConfirmDelete,
     Search,
     ContentSearch,
+    Help,
 }
 
 // main application state
@@ -134,9 +135,7 @@ impl App {
             notes,
             all_notes,
             list_state: state,
-            status_msg: String::from(
-                " 'n' for new note, 'enter' to edit, 'g' to sync, 'd' to delete, '/' to search",
-            ),
+            status_msg: String::from(" Press 'h' for help "),
             base_path,
             config: config.clone(),
             should_quit: false,
@@ -319,6 +318,9 @@ impl App {
     }
 
     pub fn next(&mut self) {
+        if self.notes.is_empty() {
+            return;
+        }
         let i = match self.list_state.selected() {
             Some(i) => {
                 if i >= self.notes.len() - 1 {
@@ -335,6 +337,9 @@ impl App {
     }
 
     pub fn previous(&mut self) {
+        if self.notes.is_empty() {
+            return;
+        }
         let i = match self.list_state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -414,6 +419,11 @@ impl App {
                     self.status_msg = String::from("Content Search: ");
                     Action::None
                 }
+                KeyCode::Char('h') => {
+                    self.input_mode = InputMode::Help;
+                    self.status_msg = String::from(" Help ");
+                    Action::None
+                }
                 KeyCode::Enter => Action::EditNote,
                 KeyCode::F(12) => Action::ToggleLogs,
                 _ => Action::None,
@@ -440,9 +450,7 @@ impl App {
                     self.input_mode = InputMode::Normal;
                     self.search_query.clear();
                     self.update_search();
-                    self.status_msg = String::from(
-                        "press 'n' for new note, 'enter' to edit, 'g' to sync, 'd' to delete, '/' to search",
-                    );
+                    self.status_msg = String::from(" Press 'h' for help ");
                     Action::None
                 }
                 KeyCode::Backspace => {
@@ -469,9 +477,7 @@ impl App {
                     self.input_mode = InputMode::Normal;
                     self.search_query.clear();
                     self.update_search();
-                    self.status_msg = String::from(
-                        "press 'n' for new note, 'enter' to edit, 'g' to sync, 'd' to delete, '/' to search",
-                    );
+                    self.status_msg = String::from(" Press 'h' for help ");
                     Action::None
                 }
                 KeyCode::Backspace => {
@@ -484,6 +490,14 @@ impl App {
                     self.search_query.push(c);
                     self.update_content_search();
                     self.status_msg = format!("Content Search: {}", self.search_query);
+                    Action::None
+                }
+                _ => Action::None,
+            },
+            InputMode::Help => match key.code {
+                KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('h') => {
+                    self.input_mode = InputMode::Normal;
+                    self.status_msg = String::from(" Press 'h' for help ");
                     Action::None
                 }
                 _ => Action::None,
