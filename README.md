@@ -126,6 +126,7 @@ bold = "#f38ba8"      # Emphasized text
 ```
 
 ```
+
 ## Contributing
 
 Contributions are welcome! Please check out [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to get started.
@@ -133,5 +134,4 @@ Contributions are welcome! Please check out [CONTRIBUTING.md](CONTRIBUTING.md) f
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
-
 ```
