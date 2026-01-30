@@ -14,7 +14,29 @@ fn create_test_note(title: &str) -> Note {
         content: Some("content".to_string()),
         last_modified: SystemTime::now(),
         size: 100,
+        tags: Vec::new(),
     }
+}
+
+#[test]
+fn test_frontmatter_tags() -> anyhow::Result<()> {
+    let temp_dir = TempDir::new()?;
+    let file_path = temp_dir.path().join("tagged_note.md");
+
+    let mut file = fs::File::create(&file_path)?;
+    use std::io::Write;
+    writeln!(file, "---")?;
+    writeln!(file, "tags: [work, urgent]")?;
+    writeln!(file, "---")?;
+    writeln!(file, "# Content")?;
+
+    let note = Note::from_path(file_path.clone())?;
+
+    assert_eq!(note.tags.len(), 2);
+    assert!(note.tags.contains(&"work".to_string()));
+    assert!(note.tags.contains(&"urgent".to_string()));
+
+    Ok(())
 }
 
 #[test]
@@ -67,6 +89,31 @@ fn test_sorting_logic() {
     app.sort_mode = SortMode::Size;
     app.sort_notes();
     assert_eq!(app.notes[0].title, "A_first"); // Size 100
+}
+
+#[test]
+fn test_cycle_theme() {
+    let mut app = App::new(vec![], PathBuf::from("/tmp"), Config::default());
+
+    // Default Theme (Catppuccin-ish)
+    // accent: Rgb(137, 220, 235)
+    let initial_accent = app.theme.accent;
+
+    // Cycle 1 -> Gruvbox
+    app.cycle_theme();
+    assert_ne!(app.theme.accent, initial_accent);
+    // Gruvbox accent is Rgb(250, 189, 47)
+    // We can just check it's not the initial one for robustness
+
+    // Cycle 2 -> Tokyo Night
+    let gruvbox_accent = app.theme.accent;
+    app.cycle_theme();
+    assert_ne!(app.theme.accent, gruvbox_accent);
+    assert_ne!(app.theme.accent, initial_accent);
+
+    // Cycle 3 -> Default
+    app.cycle_theme();
+    assert_eq!(app.theme.accent, initial_accent);
 }
 
 #[test]
