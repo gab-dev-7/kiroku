@@ -40,7 +40,14 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         .iter()
         .map(|note| {
             let tags_display = if !note.tags.is_empty() {
-                format!(" [{}]", note.tags.iter().map(|t| format!("#{}", t)).collect::<Vec<_>>().join(" "))
+                format!(
+                    " [{}]",
+                    note.tags
+                        .iter()
+                        .map(|t| format!("#{}", t))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )
             } else {
                 String::new()
             };
@@ -331,6 +338,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                     .add_modifier(Modifier::BOLD),
             )),
             Line::from("  h           : Toggle this help"),
+            Line::from("  t           : Cycle themes"),
             Line::from("  F12         : Toggle logs"),
             Line::from("  q           : Quit"),
         ];

@@ -73,9 +73,8 @@ fn extract_tags(path: &PathBuf) -> Result<Vec<String>> {
 
     // Attempt to parse YAML
     // If it fails, we just assume no valid tags were found in that block
-    let fm: Frontmatter = serde_yaml::from_str(&frontmatter_content).unwrap_or(Frontmatter {
-        tags: Vec::new(),
-    });
+    let fm: Frontmatter =
+        serde_yaml::from_str(&frontmatter_content).unwrap_or(Frontmatter { tags: Vec::new() });
     Ok(fm.tags)
 }
 

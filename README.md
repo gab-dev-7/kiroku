@@ -11,13 +11,14 @@ kiroku-tui helps you manage a collection of markdown notes directly from your te
 - **Terminal Interface**: Clean TUI built with `ratatui`.
 - **Fuzzy Search**: Quickly find notes by title.
 - **Content Search**: Deep search within the body of your notes.
+- **Tag Search**: Filter notes by tags defined in YAML frontmatter.
 - **Note Renaming**: Rename existing notes directly within the app.
 - **Smart Sorting**: Toggle between sorting by Date, Name, or Size.
 - **External Editor**: Opens notes in your preferred editor (Vim, Nano, VS Code, etc.).
 - **Smart Git Sync**: Built-in command to add, commit, and push changes. Skips redundant network calls if up-to-date.
 - **File Watching**: Automatically updates the list when files are changed externally.
 - **Auto-Sync on Exit**: Optional setting to automatically sync with Git when quitting.
-- **Theming**: Fully customizable color schemes.
+- **Theming**: Fully customizable color schemes with built-in theme cycling.
 - **Clipboard Integration**: Copy note content or file paths directly to your clipboard.
 
 ## Installation
@@ -64,9 +65,11 @@ git init
 - `r`: Rename the selected note
 - `d`: Delete the selected note (prompts for confirmation)
 - `s`: Cycle sort mode (Date, Name, Size)
+- `t`: Cycle built-in themes (Default -> Gruvbox -> Tokyo Night)
 - `g`: Sync with Git (add, commit, push)
 - `/`: Enter title search mode
 - `?`: Enter content search mode
+- `#`: Enter tag search mode
 - `j` / `k`: Navigate up/down
 - `Ctrl+j` / `Ctrl+k`: Scroll preview pane up/down
 - `y`: Copy note content to clipboard
@@ -79,6 +82,21 @@ git init
 - Type to filter notes
 - `Enter`: Keep current filter and return to list
 - `Esc`: Clear search and return to list
+
+### Using Tags
+
+kiroku supports tagging notes using YAML frontmatter at the top of your markdown files.
+
+```markdown
+---
+tags: [work, meeting, important]
+---
+
+# My Note Title
+...
+```
+
+Use `#` to filter your notes by these tags.
 
 ## Configuration
 

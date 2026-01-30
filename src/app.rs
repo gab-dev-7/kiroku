@@ -251,9 +251,11 @@ impl App {
                 .iter()
                 .filter_map(|note| {
                     // Check if any tag matches
-                    let best_score = note.tags.iter().filter_map(|tag| {
-                        matcher.fuzzy_match(tag, &self.search_query)
-                    }).max();
+                    let best_score = note
+                        .tags
+                        .iter()
+                        .filter_map(|tag| matcher.fuzzy_match(tag, &self.search_query))
+                        .max();
 
                     best_score.map(|score| (note, score))
                 })
