@@ -323,6 +323,9 @@ fn main() -> Result<()> {
                         app.sort_notes();
                         app.save_config();
                     }
+                    Action::CycleTheme => {
+                        app.cycle_theme();
+                    }
                     Action::None => {}
                 }
             }

@@ -38,7 +38,14 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     let items: Vec<ListItem> = app
         .notes
         .iter()
-        .map(|note| ListItem::new(format!(" {} ", note.title)))
+        .map(|note| {
+            let tags_display = if !note.tags.is_empty() {
+                format!(" [{}]", note.tags.iter().map(|t| format!("#{}", t)).collect::<Vec<_>>().join(" "))
+            } else {
+                String::new()
+            };
+            ListItem::new(format!(" {}{}", note.title, tags_display))
+        })
         .collect();
 
     let list = List::new(items)
@@ -185,6 +192,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         InputMode::Renaming => format!("{} RENAMING NOTE: {}", spinner, app.status_msg),
         InputMode::ConfirmDelete => format!("{} DELETING NOTE: {}", spinner, app.status_msg),
         InputMode::Search => format!("{} SEARCH: {}", spinner, app.search_query),
+        InputMode::TagSearch => format!("{} TAG SEARCH: {}", spinner, app.search_query),
         InputMode::ContentSearch => format!("{} CONTENT SEARCH: {}", spinner, app.search_query),
         InputMode::Help => format!("{} HELP: Press Esc to close", spinner),
     };
@@ -313,6 +321,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             )),
             Line::from("  /           : Search notes by title"),
             Line::from("  ?           : Search notes by content"),
+            Line::from("  #           : Search notes by tag"),
             Line::from("  Esc         : Clear search / Close popup"),
             Line::from(""),
             Line::from(Span::styled(

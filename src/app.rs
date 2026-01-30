@@ -47,6 +47,7 @@ pub enum Action {
     ScrollUp,
     ScrollDown,
     CycleSort,
+    CycleTheme,
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -82,6 +83,7 @@ pub enum InputMode {
     ConfirmDelete,
     Search,
     ContentSearch,
+    TagSearch,
     Help,
 }
 
@@ -237,6 +239,39 @@ impl App {
         }
     }
 
+    // filter notes list based on fuzzy search of tags
+    pub fn update_tag_search(&mut self) {
+        if self.search_query.is_empty() {
+            self.notes = self.all_notes.clone();
+            self.sort_notes();
+        } else {
+            let matcher = SkimMatcherV2::default();
+            let mut matches: Vec<(&Note, i64)> = self
+                .all_notes
+                .iter()
+                .filter_map(|note| {
+                    // Check if any tag matches
+                    let best_score = note.tags.iter().filter_map(|tag| {
+                        matcher.fuzzy_match(tag, &self.search_query)
+                    }).max();
+
+                    best_score.map(|score| (note, score))
+                })
+                .collect();
+
+            matches.sort_by(|a, b| b.1.cmp(&a.1));
+            self.notes = matches.into_iter().map(|(n, _)| n.clone()).collect();
+        }
+
+        // Reset selection
+        if !self.notes.is_empty() {
+            self.list_state.select(Some(0));
+            self.load_note_content(0);
+        } else {
+            self.list_state.select(None);
+        }
+    }
+
     // filter notes list based on fuzzy search of content
     pub fn update_content_search(&mut self) {
         if self.search_query.is_empty() {
@@ -373,6 +408,41 @@ impl App {
         }
     }
 
+    pub fn cycle_theme(&mut self) {
+        // Simple cycle: Default -> Gruvbox -> Tokyo Night -> Default
+        let current_accent = self.theme.accent;
+
+        // Identify current theme by accent color (heuristic)
+        // Default: 137, 220, 235 (#89dceb)
+        // Gruvbox: 250, 189, 47  (#fabd2f)
+        // Tokyo:   122, 162, 247 (#7aa2f7)
+
+        let next_theme = if current_accent == Color::Rgb(137, 220, 235) {
+            // Switch to Gruvbox
+            ThemeColors {
+                accent: Color::Rgb(250, 189, 47),    // Yellow
+                selection: Color::Rgb(215, 153, 33), // Dark Yellow
+                header: Color::Rgb(251, 73, 52),     // Red
+                dim: Color::Rgb(168, 153, 132),      // Gray
+                bold: Color::Rgb(254, 128, 25),      // Orange
+            }
+        } else if current_accent == Color::Rgb(250, 189, 47) {
+            // Switch to Tokyo Night
+            ThemeColors {
+                accent: Color::Rgb(122, 162, 247),    // Blue
+                selection: Color::Rgb(187, 154, 247), // Purple
+                header: Color::Rgb(125, 207, 255),    // Cyan
+                dim: Color::Rgb(86, 95, 137),         // Dark Blue/Gray
+                bold: Color::Rgb(247, 118, 142),      // Red/Pink
+            }
+        } else {
+            // Back to Default (Catppuccin Mocha-ish)
+            ThemeColors::default()
+        };
+
+        self.theme = next_theme;
+    }
+
     // process keyboard input based on current mode
     pub fn handle_input(&mut self, key: KeyEvent) -> Action {
         match self.input_mode {
@@ -405,12 +475,19 @@ impl App {
                 KeyCode::Char('d') => Action::DeleteNote,
                 KeyCode::Char('r') => Action::RenameNote,
                 KeyCode::Char('s') => Action::CycleSort,
+                KeyCode::Char('t') => Action::CycleTheme,
                 KeyCode::Char('y') => Action::CopyContent,
                 KeyCode::Char('Y') => Action::CopyPath,
                 KeyCode::Char('/') => {
                     self.input_mode = InputMode::Search;
                     self.search_query.clear();
                     self.status_msg = String::from("Search: ");
+                    Action::None
+                }
+                KeyCode::Char('#') => {
+                    self.input_mode = InputMode::TagSearch;
+                    self.search_query.clear();
+                    self.status_msg = String::from("Tag Search: ");
                     Action::None
                 }
                 KeyCode::Char('?') => {
@@ -463,6 +540,33 @@ impl App {
                     self.search_query.push(c);
                     self.update_search();
                     self.status_msg = format!("Search: {}", self.search_query);
+                    Action::None
+                }
+                _ => Action::None,
+            },
+            InputMode::TagSearch => match key.code {
+                KeyCode::Enter => {
+                    self.input_mode = InputMode::Normal;
+                    self.status_msg = String::from("Tag filter active. Esc to clear.");
+                    Action::None
+                }
+                KeyCode::Esc => {
+                    self.input_mode = InputMode::Normal;
+                    self.search_query.clear();
+                    self.update_tag_search();
+                    self.status_msg = String::from(" Press 'h' for help ");
+                    Action::None
+                }
+                KeyCode::Backspace => {
+                    self.search_query.pop();
+                    self.update_tag_search();
+                    self.status_msg = format!("Tag Search: {}", self.search_query);
+                    Action::None
+                }
+                KeyCode::Char(c) => {
+                    self.search_query.push(c);
+                    self.update_tag_search();
+                    self.status_msg = format!("Tag Search: {}", self.search_query);
                     Action::None
                 }
                 _ => Action::None,

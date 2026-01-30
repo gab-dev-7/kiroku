@@ -1,9 +1,17 @@
 use anyhow::{Context, Result};
 use log::warn;
+use serde::Deserialize;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::SystemTime;
 use walkdir::WalkDir;
+
+#[derive(Debug, Deserialize)]
+struct Frontmatter {
+    #[serde(default)]
+    tags: Vec<String>,
+}
 
 // represents a single markdown note file
 #[derive(Debug, Clone)]
@@ -13,6 +21,7 @@ pub struct Note {
     pub content: Option<String>,
     pub last_modified: SystemTime,
     pub size: u64,
+    pub tags: Vec<String>,
 }
 
 impl Note {
@@ -27,14 +36,47 @@ impl Note {
             .to_string_lossy()
             .to_string();
 
+        let tags = extract_tags(&path).unwrap_or_default();
+
         Ok(Self {
             path,
             title,
             content: None,
             last_modified: metadata.modified().unwrap_or(SystemTime::now()),
             size: metadata.len(),
+            tags,
         })
     }
+}
+
+fn extract_tags(path: &PathBuf) -> Result<Vec<String>> {
+    let file = fs::File::open(path)?;
+    let mut reader = BufReader::new(file);
+    let mut line = String::new();
+
+    // Check first line
+    if reader.read_line(&mut line)? == 0 || line.trim() != "---" {
+        return Ok(Vec::new());
+    }
+
+    let mut frontmatter_content = String::new();
+    loop {
+        line.clear();
+        if reader.read_line(&mut line)? == 0 {
+            break;
+        }
+        if line.trim() == "---" {
+            break;
+        }
+        frontmatter_content.push_str(&line);
+    }
+
+    // Attempt to parse YAML
+    // If it fails, we just assume no valid tags were found in that block
+    let fm: Frontmatter = serde_yaml::from_str(&frontmatter_content).unwrap_or(Frontmatter {
+        tags: Vec::new(),
+    });
+    Ok(fm.tags)
 }
 
 // read the full text content of a note file
