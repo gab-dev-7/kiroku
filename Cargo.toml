@@ -1,6 +1,6 @@
 [package]
 name = "kiroku-tui"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2024"
 description = "A simple, terminal-based personal journaling and note-taking tool."
 repository = "https://github.com/gab-dev-7/kiroku"
@@ -28,6 +28,7 @@ toml = "0.8"
 notify = "8.0.0"
 fuzzy-matcher = "0.3.7"
 arboard = { version = "3.6.1", features = ["wayland-data-control"] }
+serde_yaml = "0.9"
 
 [dev-dependencies]
 tempfile = "3.24.0"
