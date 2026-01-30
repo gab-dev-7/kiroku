@@ -122,4 +122,13 @@ selection = "#bb9af7" # Selected item
 header = "#89b4fa"    # List headers
 dim = "#6c7086"       # Metadata/dates
 bold = "#f38ba8"      # Emphasized text
+
+## Contributing
+
+Contributions are welcome! Please check out [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to get started.
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.
+
 ```
