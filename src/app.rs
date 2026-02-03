@@ -34,6 +34,7 @@ pub enum Action {
     Quit,
     Sync,
     NewNote,
+    NewFolder,
     EditNote,
     DeleteNote,
     RenameNote,
@@ -79,6 +80,7 @@ impl SortMode {
 pub enum InputMode {
     Normal,
     Editing,
+    CreatingFolder,
     Renaming,
     ConfirmDelete,
     Search,
@@ -87,10 +89,12 @@ pub enum InputMode {
     Help,
 }
 
-// main application state
+// main app state
 pub struct App {
     pub notes: Vec<Note>,
     pub all_notes: Vec<Note>,
+    pub fs_items: Vec<data::FileSystemItem>,
+    pub current_dir: PathBuf,
     pub list_state: ListState,
     pub status_msg: String,
     pub base_path: PathBuf,
@@ -110,7 +114,7 @@ pub struct App {
 }
 
 impl App {
-    // initialize application state
+    // init app state
     pub fn new(notes: Vec<Note>, base_path: PathBuf, config: Config) -> App {
         let state = ListState::default();
         let all_notes = notes.clone();
@@ -136,6 +140,8 @@ impl App {
         let mut app = App {
             notes,
             all_notes,
+            fs_items: Vec::new(),
+            current_dir: PathBuf::new(),
             list_state: state,
             status_msg: String::from(" Press 'h' for help "),
             base_path,
@@ -177,19 +183,45 @@ impl App {
             app.theme.bold = parse(&user_theme.bold, app.theme.bold);
         }
 
-        // Apply initial sort
         app.sort_notes();
+        app.refresh_fs_view();
 
-        if !app.notes.is_empty() {
+        if !app.fs_items.is_empty() {
             app.list_state.select(Some(0));
-            app.load_note_content(0);
         }
         app
     }
 
-    // sort notes based on current mode
+    // refresh item list from current dir
+    pub fn refresh_fs_view(&mut self) {
+        let target_dir = self.base_path.join(&self.current_dir);
+        let items_res = data::load_all_items(&target_dir.to_string_lossy());
+
+        if let Ok(mut items) = items_res {
+            let current_depth = self.current_dir.components().count();
+
+            items.retain(|item| {
+                let path = match item {
+                    data::FileSystemItem::Note(n) => &n.path,
+                    data::FileSystemItem::Folder(p) => p,
+                };
+
+                let rel_path = path.strip_prefix(&self.base_path).unwrap_or(path);
+
+                if !rel_path.starts_with(&self.current_dir) {
+                    return false;
+                }
+
+                let rel_depth = rel_path.components().count();
+                rel_depth == current_depth + 1
+            });
+
+            self.fs_items = items;
+        }
+    }
+
+    // sort notes
     pub fn sort_notes(&mut self) {
-        // sort only if not in search mode
         if !self.search_query.is_empty() {
             return;
         }
@@ -209,7 +241,7 @@ impl App {
         }
     }
 
-    // filter notes list based on fuzzy search query
+    // fuzzy search notes by title
     pub fn update_search(&mut self) {
         if self.search_query.is_empty() {
             self.notes = self.all_notes.clone();
@@ -230,7 +262,7 @@ impl App {
             self.notes = matches.into_iter().map(|(n, _)| n.clone()).collect();
         }
 
-        // Reset selection
+        // reset selection
         if !self.notes.is_empty() {
             self.list_state.select(Some(0));
             self.load_note_content(0);
@@ -239,7 +271,7 @@ impl App {
         }
     }
 
-    // filter notes list based on fuzzy search of tags
+    // fuzzy search notes by tags
     pub fn update_tag_search(&mut self) {
         if self.search_query.is_empty() {
             self.notes = self.all_notes.clone();
@@ -265,7 +297,7 @@ impl App {
             self.notes = matches.into_iter().map(|(n, _)| n.clone()).collect();
         }
 
-        // Reset selection
+        // reset selection
         if !self.notes.is_empty() {
             self.list_state.select(Some(0));
             self.load_note_content(0);
@@ -274,7 +306,7 @@ impl App {
         }
     }
 
-    // filter notes list based on fuzzy search of content
+    // fuzzy search notes by content
     pub fn update_content_search(&mut self) {
         if self.search_query.is_empty() {
             self.notes = self.all_notes.clone();
@@ -287,21 +319,17 @@ impl App {
                 .all_notes
                 .iter()
                 .filter_map(|note| {
-                    // Try to load content if not present
                     let content = if let Some(ref c) = note.content {
                         Some(c.clone())
                     } else {
                         data::read_note_content(&note.path).ok()
                     };
 
-                    if let Some(content) = content {
-                        // We use simple case-insensitive contains for content search
-                        // as fuzzy matching large files is extremely expensive.
-                        if content.to_lowercase().contains(&query) {
-                            // Boost score slightly if the title also matches
-                            let title_score = matcher.fuzzy_match(&note.title, &query).unwrap_or(0);
-                            return Some((note, 100 + title_score));
-                        }
+                    if let Some(content) = content
+                        && content.to_lowercase().contains(&query)
+                    {
+                        let title_score = matcher.fuzzy_match(&note.title, &query).unwrap_or(0);
+                        return Some((note, 100 + title_score));
                     }
                     None
                 })
@@ -311,7 +339,7 @@ impl App {
             self.notes = matches.into_iter().map(|(n, _)| n.clone()).collect();
         }
 
-        // Reset selection
+        // reset selection
         if !self.notes.is_empty() {
             self.list_state.select(Some(0));
             self.load_note_content(0);
@@ -320,7 +348,7 @@ impl App {
         }
     }
 
-    // load file content into memory with lru cache eviction
+    // load content with lru cache
     pub fn load_note_content(&mut self, index: usize) {
         if index >= self.notes.len() {
             return;
@@ -338,58 +366,115 @@ impl App {
             }
         }
 
-        // Update cache (LRU)
+        // update cache (lru)
         self.recent_indices.retain(|&i| i != index);
         self.recent_indices.push_back(index);
 
         if self.recent_indices.len() > 10
             && let Some(old_idx) = self.recent_indices.pop_front()
+            && Some(old_idx) != self.list_state.selected()
+            && !self.recent_indices.contains(&old_idx)
         {
-            // Don't clear if it's currently selected or still in recent list
-            if Some(old_idx) != self.list_state.selected()
-                && !self.recent_indices.contains(&old_idx)
-            {
-                self.notes[old_idx].content = None;
-            }
+            self.notes[old_idx].content = None;
         }
     }
 
     pub fn next(&mut self) {
-        if self.notes.is_empty() {
-            return;
-        }
-        let i = match self.list_state.selected() {
-            Some(i) => {
-                if i >= self.notes.len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
+        if !self.search_query.is_empty() {
+            if self.notes.is_empty() {
+                return;
             }
-            None => 0,
-        };
-        self.list_state.select(Some(i));
-        self.load_note_content(i);
+            let i = match self.list_state.selected() {
+                Some(i) => {
+                    if i >= self.notes.len() - 1 {
+                        0
+                    } else {
+                        i + 1
+                    }
+                }
+                None => 0,
+            };
+            self.list_state.select(Some(i));
+            self.load_note_content(i);
+        } else {
+            // navigate fs_items
+            if self.fs_items.is_empty() {
+                return;
+            }
+            let i = match self.list_state.selected() {
+                Some(i) => {
+                    if i >= self.fs_items.len() - 1 {
+                        0
+                    } else {
+                        i + 1
+                    }
+                }
+                None => 0,
+            };
+            self.list_state.select(Some(i));
+            self.load_fs_item_content(i);
+        }
         self.preview_scroll = 0;
     }
 
     pub fn previous(&mut self) {
-        if self.notes.is_empty() {
+        // if searching, navigate notes list
+        if !self.search_query.is_empty() {
+            if self.notes.is_empty() {
+                return;
+            }
+            let i = match self.list_state.selected() {
+                Some(i) => {
+                    if i == 0 {
+                        self.notes.len() - 1
+                    } else {
+                        i - 1
+                    }
+                }
+                None => 0,
+            };
+            self.list_state.select(Some(i));
+            self.load_note_content(i);
+        } else {
+            // navigate fs_items
+            if self.fs_items.is_empty() {
+                return;
+            }
+            let i = match self.list_state.selected() {
+                Some(i) => {
+                    if i == 0 {
+                        self.fs_items.len() - 1
+                    } else {
+                        i - 1
+                    }
+                }
+                None => 0,
+            };
+            self.list_state.select(Some(i));
+            self.load_fs_item_content(i);
+        }
+        self.preview_scroll = 0;
+    }
+
+    // load content for file system items
+    pub fn load_fs_item_content(&mut self, index: usize) {
+        if index >= self.fs_items.len() {
             return;
         }
-        let i = match self.list_state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.notes.len() - 1
-                } else {
-                    i - 1
-                }
+
+        match &self.fs_items[index] {
+            data::FileSystemItem::Note(_note) => {}
+            data::FileSystemItem::Folder(_) => {
+                return;
             }
-            None => 0,
-        };
-        self.list_state.select(Some(i));
-        self.load_note_content(i);
-        self.preview_scroll = 0;
+        }
+
+        if let data::FileSystemItem::Note(ref mut n) = self.fs_items[index]
+            && n.content.is_none()
+            && let Ok(c) = data::read_note_content(&n.path)
+        {
+            n.content = Some(c);
+        }
     }
 
     pub fn tick(&mut self) {
@@ -411,16 +496,16 @@ impl App {
     }
 
     pub fn cycle_theme(&mut self) {
-        // Simple cycle: Default -> Gruvbox -> Tokyo Night -> Default
+        // cycle through themes
         let current_accent = self.theme.accent;
 
-        // Identify current theme by accent color (heuristic)
+        // identify current theme by accent
         // Default: 137, 220, 235 (#89dceb)
         // Gruvbox: 250, 189, 47  (#fabd2f)
         // Tokyo:   122, 162, 247 (#7aa2f7)
 
         let next_theme = if current_accent == Color::Rgb(137, 220, 235) {
-            // Switch to Gruvbox
+            // Gruvbox
             ThemeColors {
                 accent: Color::Rgb(250, 189, 47),    // Yellow
                 selection: Color::Rgb(215, 153, 33), // Dark Yellow
@@ -429,7 +514,7 @@ impl App {
                 bold: Color::Rgb(254, 128, 25),      // Orange
             }
         } else if current_accent == Color::Rgb(250, 189, 47) {
-            // Switch to Tokyo Night
+            // Tokyo Night
             ThemeColors {
                 accent: Color::Rgb(122, 162, 247),    // Blue
                 selection: Color::Rgb(187, 154, 247), // Purple
@@ -445,7 +530,7 @@ impl App {
         self.theme = next_theme;
     }
 
-    // process keyboard input based on current mode
+    // handle input
     pub fn handle_input(&mut self, key: KeyEvent) -> Action {
         match self.input_mode {
             InputMode::Normal => match key.code {
@@ -474,6 +559,7 @@ impl App {
                 }
                 KeyCode::Char('g') => Action::Sync,
                 KeyCode::Char('n') => Action::NewNote,
+                KeyCode::Char('f') => Action::NewFolder,
                 KeyCode::Char('d') => Action::DeleteNote,
                 KeyCode::Char('r') => Action::RenameNote,
                 KeyCode::Char('s') => Action::CycleSort,
@@ -498,22 +584,64 @@ impl App {
                     self.status_msg = String::from("Content Search: ");
                     Action::None
                 }
-                KeyCode::Char('h') => {
+                KeyCode::F(1) => {
                     self.input_mode = InputMode::Help;
                     self.status_msg = String::from(" Help ");
                     Action::None
                 }
-                KeyCode::Enter => Action::EditNote,
+                KeyCode::Char('h') | KeyCode::Backspace => {
+                    if self.search_query.is_empty()
+                        && self.current_dir.components().count() > 0
+                        && let Some(parent) = self.current_dir.parent()
+                    {
+                        self.current_dir = parent.to_path_buf();
+                        self.refresh_fs_view();
+                        self.list_state.select(Some(0));
+                        self.status_msg = format!("Dir: {}", self.current_dir.display());
+                    }
+                    Action::None
+                }
+                KeyCode::Char('l') | KeyCode::Enter => {
+                    // check if selected item is folder
+                    if self.search_query.is_empty() {
+                        if let Some(i) = self.list_state.selected() {
+                            if i < self.fs_items.len() {
+                                match &self.fs_items[i] {
+                                    data::FileSystemItem::Folder(path) => {
+                                        // enter folder
+                                        let rel_path =
+                                            path.strip_prefix(&self.base_path).unwrap_or(path);
+                                        self.current_dir = rel_path.to_path_buf();
+                                        self.refresh_fs_view();
+                                        self.list_state.select(Some(0));
+                                        self.status_msg =
+                                            format!("Dir: {}", self.current_dir.display());
+                                        Action::None
+                                    }
+                                    data::FileSystemItem::Note(_) => Action::EditNote,
+                                }
+                            } else {
+                                Action::None
+                            }
+                        } else {
+                            Action::None
+                        }
+                    } else {
+                        Action::EditNote
+                    }
+                }
                 KeyCode::F(12) => Action::ToggleLogs,
                 _ => Action::None,
             },
-            InputMode::Editing | InputMode::Renaming => match key.code {
-                KeyCode::Enter => Action::SubmitInput,
-                KeyCode::Esc => Action::CancelInput,
-                KeyCode::Backspace => Action::Backspace,
-                KeyCode::Char(c) => Action::EnterChar(c),
-                _ => Action::None,
-            },
+            InputMode::Editing | InputMode::CreatingFolder | InputMode::Renaming => {
+                match key.code {
+                    KeyCode::Enter => Action::SubmitInput,
+                    KeyCode::Esc => Action::CancelInput,
+                    KeyCode::Backspace => Action::Backspace,
+                    KeyCode::Char(c) => Action::EnterChar(c),
+                    _ => Action::None,
+                }
+            }
             InputMode::ConfirmDelete => match key.code {
                 KeyCode::Char('y') => Action::SubmitInput,
                 KeyCode::Char('n') | KeyCode::Esc => Action::CancelInput,
