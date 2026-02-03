@@ -30,7 +30,7 @@ fn test_frontmatter_tags() -> anyhow::Result<()> {
     writeln!(file, "---")?;
     writeln!(file, "# Content")?;
 
-    let note = Note::from_path(file_path.clone())?;
+    let note = Note::from_path(file_path.clone(), temp_dir.path())?;
 
     assert_eq!(note.tags.len(), 2);
     assert!(note.tags.contains(&"work".to_string()));
@@ -130,7 +130,7 @@ fn test_lru_cache_eviction() {
 
     app.list_state.select(Some(10));
 
-    for i in 1..=10 {
+    for i in 0..=10 {
         app.load_note_content(i);
     }
 
@@ -148,7 +148,7 @@ fn test_note_from_path() -> anyhow::Result<()> {
     use std::io::Write;
     writeln!(file, "# Test Content")?;
 
-    let note = Note::from_path(file_path.clone())?;
+    let note = Note::from_path(file_path.clone(), temp_dir.path())?;
 
     assert_eq!(note.title, "test_note");
     assert_eq!(note.path, file_path);
