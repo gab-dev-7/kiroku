@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-// application configuration options
+// config options
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
     pub editor_cmd: Option<String>,
@@ -55,7 +55,7 @@ auto_sync = false
 # bold = "#f38ba8"      # Bold text and heavy emphasis
 "##;
 
-// load configuration from standard location or return defaults
+// load config
 pub fn load_config() -> Result<Config> {
     let home_dir =
         dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
@@ -75,7 +75,7 @@ pub fn load_config() -> Result<Config> {
     Ok(config)
 }
 
-// save configuration to disk
+// save config
 pub fn save_config(config: &Config) -> Result<()> {
     let home_dir =
         dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
