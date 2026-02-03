@@ -9,7 +9,7 @@ use ratatui::{
 };
 use tui_logger::TuiLoggerWidget;
 
-// renders the main tui interface
+// render tui interface
 pub fn ui(f: &mut Frame, app: &mut App) {
     let constraints = if app.show_logs {
         vec![
@@ -34,31 +34,97 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
         .split(main_area);
 
-    // --- List Widget ---
-    let items: Vec<ListItem> = app
-        .notes
-        .iter()
-        .map(|note| {
-            let tags_display = if !note.tags.is_empty() {
-                format!(
-                    " [{}]",
-                    note.tags
-                        .iter()
-                        .map(|t| format!("#{}", t))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                )
-            } else {
-                String::new()
-            };
-            ListItem::new(format!(" {}{}", note.title, tags_display))
-        })
-        .collect();
+    let items: Vec<ListItem> = if !app.search_query.is_empty() {
+        // show filtered notes
+        app.notes
+            .iter()
+            .map(|note| {
+                let tags_display = if !note.tags.is_empty() {
+                    format!(
+                        " [{}]",
+                        note.tags
+                            .iter()
+                            .map(|t| format!("#{}", t))
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    )
+                } else {
+                    String::new()
+                };
+
+                let mut spans = Vec::new();
+
+                let separator_idx = note.title.rfind('/').or_else(|| note.title.rfind('\\'));
+
+                if let Some(idx) = separator_idx {
+                    let (folder, name) = note.title.split_at(idx + 1);
+                    spans.push(Span::styled(
+                        format!(" {}", folder),
+                        Style::default().fg(app.theme.dim),
+                    ));
+                    spans.push(Span::raw(name));
+                } else {
+                    spans.push(Span::raw(format!(" {}", note.title)));
+                }
+
+                if !tags_display.is_empty() {
+                    spans.push(Span::styled(
+                        tags_display,
+                        Style::default().fg(app.theme.dim),
+                    ));
+                }
+
+                ListItem::new(Line::from(spans))
+            })
+            .collect()
+    } else {
+        // show file system items
+        app.fs_items
+            .iter()
+            .map(|item| match item {
+                crate::data::FileSystemItem::Folder(path) => {
+                    let name = path.file_name().unwrap().to_string_lossy();
+                    ListItem::new(Line::from(vec![
+                        Span::styled(
+                            "> ",
+                            Style::default()
+                                .fg(Color::Yellow)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            name.to_string(),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
+                    ]))
+                }
+                crate::data::FileSystemItem::Note(note) => {
+                    let name = note.path.file_name().unwrap().to_string_lossy();
+                    let name = name.strip_suffix(".md").unwrap_or(&name);
+
+                    ListItem::new(Line::from(vec![
+                        Span::styled("  ", Style::default().fg(app.theme.accent)),
+                        Span::raw(name.to_string()),
+                    ]))
+                }
+            })
+            .collect()
+    };
+
+    let title = if !app.search_query.is_empty() {
+        format!(" Search Results [{}] ", app.notes.len())
+    } else {
+        let path_str = if app.current_dir.as_os_str().is_empty() {
+            "Root".to_string()
+        } else {
+            app.current_dir.to_string_lossy().to_string()
+        };
+        format!(" {} ", path_str)
+    };
 
     let list = List::new(items)
         .block(
             Block::default()
-                .title(format!(" Notes [{}] ", app.sort_mode.as_str()))
+                .title(title)
                 .title_style(Style::default().add_modifier(Modifier::BOLD))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
@@ -74,70 +140,119 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
     f.render_stateful_widget(list, main_chunks[0], &mut app.list_state);
 
-    // Preview Widget
-    let (preview_content, preview_title, preview_footer) =
-        if let Some(i) = app.list_state.selected() {
+    // keep content string alive
+    // let mut content_string = String::new();
+
+    let (preview_content, preview_title, preview_footer) = if let Some(i) =
+        app.list_state.selected()
+    {
+        let selected_note = if !app.search_query.is_empty() {
             if i < app.notes.len() {
-                let note = &app.notes[i];
-                let content = note.content.as_deref().unwrap_or("Loading...");
+                Some(app.notes[i].clone())
+            } else {
+                None
+            }
+        } else if i < app.fs_items.len() {
+            match &app.fs_items[i] {
+                crate::data::FileSystemItem::Note(n) => Some(n.clone()),
+                crate::data::FileSystemItem::Folder(_) => None,
+            }
+        } else {
+            None
+        };
 
-                let lines: Vec<Line> = content
-                    .lines()
-                    .map(|line| {
-                        if line.starts_with("# ") {
-                            Line::from(Span::styled(
-                                line,
-                                Style::default()
-                                    .fg(app.theme.header)
-                                    .add_modifier(Modifier::BOLD),
-                            ))
-                        } else if line.starts_with("## ") {
-                            Line::from(Span::styled(
-                                line,
-                                Style::default()
-                                    .fg(app.theme.accent)
-                                    .add_modifier(Modifier::BOLD),
-                            ))
-                        } else if line.starts_with("### ") {
-                            Line::from(Span::styled(
-                                line,
-                                Style::default()
-                                    .fg(app.theme.selection)
-                                    .add_modifier(Modifier::BOLD),
-                            ))
-                        } else if line.starts_with(
-                            "`
+        if let Some(note) = selected_note {
+            let content_string = note
+                .content
+                .clone()
+                .unwrap_or_else(|| "Loading...".to_string());
+            let content = content_string.as_str();
+
+            let lines: Vec<Line> = content
+                .lines()
+                .map(|line| {
+                    if line.starts_with("# ") {
+                        Line::from(Span::styled(
+                            line.to_string(),
+                            Style::default()
+                                .fg(app.theme.header)
+                                .add_modifier(Modifier::BOLD),
+                        ))
+                    } else if line.starts_with("## ") {
+                        Line::from(Span::styled(
+                            line.to_string(),
+                            Style::default()
+                                .fg(app.theme.accent)
+                                .add_modifier(Modifier::BOLD),
+                        ))
+                    } else if line.starts_with("### ") {
+                        Line::from(Span::styled(
+                            line.to_string(),
+                            Style::default()
+                                .fg(app.theme.selection)
+                                .add_modifier(Modifier::BOLD),
+                        ))
+                    } else if line.starts_with(
+                        "`
 ```",
-                        ) {
-                            Line::from(Span::styled(line, Style::default().fg(app.theme.dim)))
-                        } else if line.starts_with("> ") {
+                    ) {
+                        Line::from(Span::styled(
+                            line.to_string(),
+                            Style::default().fg(app.theme.dim),
+                        ))
+                    } else if line.starts_with("> ") {
+                        Line::from(Span::styled(
+                            line.to_string(),
+                            Style::default()
+                                .fg(Color::Rgb(166, 227, 161))
+                                .add_modifier(Modifier::ITALIC),
+                        ))
+                    } else {
+                        Line::from(line.to_string())
+                    }
+                })
+                .collect();
+
+            let title = format!(" {} ", note.title);
+            let dt: DateTime<Local> = note.last_modified.into();
+            let footer = format!(" {} | {} bytes ", dt.format("%Y-%m-%d %H:%M"), note.size);
+
+            (lines, title, footer)
+        } else {
+            // handle folder selection or invalid index
+            if !app.search_query.is_empty() {
+                (vec![Line::from("")], " Preview ".to_string(), String::new())
+            } else if i < app.fs_items.len() {
+                match &app.fs_items[i] {
+                    crate::data::FileSystemItem::Folder(p) => (
+                        vec![
+                            Line::from(""),
                             Line::from(Span::styled(
-                                line,
+                                "  > Folder",
                                 Style::default()
-                                    .fg(Color::Rgb(166, 227, 161))
-                                    .add_modifier(Modifier::ITALIC),
-                            ))
-                        } else {
-                            Line::from(line)
-                        }
-                    })
-                    .collect();
-
-                let title = format!(" {} ", note.title);
-                let dt: DateTime<Local> = note.last_modified.into();
-                let footer = format!(" {} | {} bytes ", dt.format("%Y-%m-%d %H:%M"), note.size);
-
-                (lines, title, footer)
+                                    .fg(Color::Yellow)
+                                    .add_modifier(Modifier::BOLD),
+                            )),
+                            Line::from(format!("  {}", p.file_name().unwrap().to_string_lossy())),
+                            Line::from(""),
+                            Line::from("  Press 'l' or Enter to open."),
+                        ],
+                        " Folder Info ".to_string(),
+                        String::new(),
+                    ),
+                    _ => (vec![Line::from("")], " Preview ".to_string(), String::new()),
+                }
             } else {
                 (vec![Line::from("")], " Preview ".to_string(), String::new())
             }
-        } else {
-            (
-                vec![Line::from(" Press 'n' to create a new note.")],
-                " Kiroku ".to_string(),
-                String::new(),
-            )
-        };
+        }
+    } else {
+        (
+            vec![Line::from(" Press 'n' to create a new note.")],
+            " Kiroku ".to_string(),
+            String::new(),
+        )
+    };
 
     let preview_block = Block::default()
         .title(preview_title)
@@ -160,7 +275,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
     f.render_widget(preview, main_chunks[1]);
 
-    // Logs
+    // render logs
     if app.show_logs {
         let tui_sm = TuiLoggerWidget::default()
             .block(
@@ -176,7 +291,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         f.render_widget(tui_sm, chunks[1]);
     }
 
-    // Status Bar
+    // render status bar
     let spinner = if app.syncing {
         let frames = ["|", "/", "-", "\\"];
         format!(" {} ", frames[app.spinner_index])
@@ -196,6 +311,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             }
         }
         InputMode::Editing => format!("{} CREATING NOTE: {}", spinner, app.status_msg),
+        InputMode::CreatingFolder => format!("{} CREATING FOLDER: {}", spinner, app.status_msg),
         InputMode::Renaming => format!("{} RENAMING NOTE: {}", spinner, app.status_msg),
         InputMode::ConfirmDelete => format!("{} DELETING NOTE: {}", spinner, app.status_msg),
         InputMode::Search => format!("{} SEARCH: {}", spinner, app.search_query),
@@ -219,15 +335,19 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
     f.render_widget(status, status_area);
 
-    // Popups
-    if app.input_mode == InputMode::Editing || app.input_mode == InputMode::Renaming {
+    // render popups
+    if app.input_mode == InputMode::Editing
+        || app.input_mode == InputMode::Renaming
+        || app.input_mode == InputMode::CreatingFolder
+    {
         let area = centered_rect(60, 20, f.area());
         f.render_widget(Clear, area);
 
-        let title = if app.input_mode == InputMode::Editing {
-            " New Note "
-        } else {
-            " Rename Note "
+        let title = match app.input_mode {
+            InputMode::Editing => " New Note ",
+            InputMode::Renaming => " Rename Note ",
+            InputMode::CreatingFolder => " New Folder ",
+            _ => "",
         };
 
         let input_block = Block::default()
@@ -303,6 +423,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                     .add_modifier(Modifier::BOLD),
             )),
             Line::from("  j / k       : Scroll list down / up"),
+            Line::from("  h / l       : Go up / Enter folder"),
             Line::from("  Ctrl+j / k  : Scroll preview down / up"),
             Line::from("  Enter       : Edit selected note"),
             Line::from(""),
@@ -313,6 +434,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                     .add_modifier(Modifier::BOLD),
             )),
             Line::from("  n           : New note"),
+            Line::from("  f           : New folder"),
             Line::from("  r           : Rename note"),
             Line::from("  d           : Delete note"),
             Line::from("  g           : Sync with git"),
@@ -337,7 +459,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                     .fg(app.theme.accent)
                     .add_modifier(Modifier::BOLD),
             )),
-            Line::from("  h           : Toggle this help"),
+            Line::from("  F1          : Toggle this help"),
             Line::from("  t           : Cycle themes"),
             Line::from("  F12         : Toggle logs"),
             Line::from("  q           : Quit"),
@@ -352,7 +474,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     }
 }
 
-// helper to center popups
+// center rect helper
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
