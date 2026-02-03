@@ -9,7 +9,8 @@ kiroku-tui helps you manage a collection of markdown notes directly from your te
 ## Features
 
 - **Terminal Interface**: Clean TUI built with `ratatui`.
-- **Fuzzy Search**: Quickly find notes by title.
+- **Folder Support**: Organize your notes into directories and navigate them with a file browser.
+- **Fuzzy Search**: Quickly find notes by title across all folders.
 - **Content Search**: Deep search within the body of your notes.
 - **Tag Search**: Filter notes by tags defined in YAML frontmatter.
 - **Note Renaming**: Rename existing notes directly within the app.
@@ -55,23 +56,35 @@ git init
 # Add your remote...
 ```
 
+### Navigation Modes
+
+**Browser Mode (Default)**
+View your notes and folders hierarchically.
+- Use `h` and `l` to navigate in and out of directories.
+- Use `f` to create new folders.
+
+**Search Mode**
+When you start searching (`/`, `#`, `?`), the view switches to a flat list of all matching notes, regardless of their folder.
+
 ### Keybindings
 
 **Normal Mode**
 
-- `h`: Open help popup
+- `F1`: Open help popup
 - `n`: Create a new note
-- `Enter`: Edit the selected note
-- `r`: Rename the selected note
-- `d`: Delete the selected note (prompts for confirmation)
+- `f`: Create a new folder
+- `Enter` / `l`: Edit selected note or Enter folder
+- `Backspace` / `h`: Go up a directory
+- `r`: Rename the selected item
+- `d`: Delete the selected item (prompts for confirmation)
 - `s`: Cycle sort mode (Date, Name, Size)
 - `t`: Cycle built-in themes (Default -> Gruvbox -> Tokyo Night)
 - `g`: Sync with Git (add, commit, push)
 - `/`: Enter title search mode
 - `?`: Enter content search mode
 - `#`: Enter tag search mode
-- `j` / `k`: Navigate up/down
-- `Ctrl+j` / `Ctrl+k`: Scroll preview pane up/down
+- `j` / `k`: Navigate down/up
+- `Ctrl+j` / `Ctrl+k`: Scroll preview pane down/up
 - `y`: Copy note content to clipboard
 - `Y`: Copy note file path to clipboard
 - `q`: Quit
@@ -81,7 +94,7 @@ git init
 
 - Type to filter notes
 - `Enter`: Keep current filter and return to list
-- `Esc`: Clear search and return to list
+- `Esc`: Clear search and return to browser view
 
 ### Using Tags
 

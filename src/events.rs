@@ -11,7 +11,7 @@ pub enum AppEvent {
     FileChanged,
 }
 
-// handles keyboard inputs and tick events in a separate thread
+// handle input and ticks
 pub struct EventHandler {
     pub sender: mpsc::Sender<AppEvent>,
     receiver: mpsc::Receiver<AppEvent>,
@@ -19,7 +19,7 @@ pub struct EventHandler {
 }
 
 impl EventHandler {
-    // spawn a background thread to poll for input events
+    // spawn input polling thread
     pub fn new(tick_rate_ms: u64) -> Self {
         let (tx, rx) = mpsc::channel();
         let tick_rate = Duration::from_millis(tick_rate_ms);
@@ -58,12 +58,12 @@ impl EventHandler {
         Ok(self.receiver.recv()?)
     }
 
-    // pause input polling
+    // pause polling
     pub fn pause(&self) {
         self.paused.store(true, Ordering::SeqCst);
     }
 
-    // resume input polling
+    // resume polling
     pub fn resume(&self) {
         self.paused.store(false, Ordering::SeqCst);
     }

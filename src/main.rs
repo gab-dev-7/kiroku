@@ -7,6 +7,7 @@ use crossterm::{
 use kiroku_tui::{
     app::{Action, App, InputMode},
     config, data,
+    errors::KirokuError,
     events::{AppEvent, EventHandler},
     ops, ui,
 };
@@ -21,7 +22,7 @@ fn main() -> Result<()> {
     tui_logger::init_logger(log::LevelFilter::Info).unwrap();
     tui_logger::set_default_level(log::LevelFilter::Info);
 
-    // setup directory, using cli argument or default home path
+    // setup directory using cli arg or default
     let args: Vec<String> = std::env::args().collect();
     let kiroku_path = if args.len() > 1 {
         PathBuf::from(&args[1])
@@ -31,13 +32,13 @@ fn main() -> Result<()> {
         home_dir.join("kiroku")
     };
 
-    // create kiroku directory if it does not exist
+    // create notebook directory if missing
     if !kiroku_path.exists() {
         fs::create_dir_all(&kiroku_path)?;
         println!("created new notebook directory at {:?}", kiroku_path);
     }
 
-    // load config from default location
+    // load configuration
     let config = match config::load_config() {
         Ok(c) => c,
         Err(e) => {
@@ -46,14 +47,14 @@ fn main() -> Result<()> {
         }
     };
 
-    // setup terminal in raw mode
+    // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // load initial data from notes directory
+    // load notes from directory
     let path_str = kiroku_path.to_string_lossy().to_string();
     let notes = match data::load_notes(&path_str) {
         Ok(n) => n,
@@ -64,10 +65,10 @@ fn main() -> Result<()> {
     };
     let mut app = App::new(notes, kiroku_path.clone(), config);
 
-    // setup event handler in a separate thread
+    // setup event handler
     let events = EventHandler::new(250);
 
-    // setup file watcher to detect changes in notes directory
+    // setup file watcher
     let tx = events.sender.clone();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         if let Ok(event) = res
@@ -78,7 +79,7 @@ fn main() -> Result<()> {
     })?;
     watcher.watch(&kiroku_path, RecursiveMode::NonRecursive)?;
 
-    // main application loop
+    // main loop
     while !app.should_quit {
         terminal.draw(|f| ui::ui(f, &mut app))?;
 
@@ -114,7 +115,7 @@ fn main() -> Result<()> {
                             events.pause();
                             std::thread::sleep(std::time::Duration::from_millis(300));
 
-                            // suspend tui to allow interactive shell commands
+                            // suspend tui for shell commands
                             let _ = disable_raw_mode();
                             let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
                             let _ = terminal.show_cursor();
@@ -126,7 +127,7 @@ fn main() -> Result<()> {
                             println!("Repository path: {:?}", app.base_path);
                             println!("(If prompted for password, input will be hidden)");
 
-                            // run git sync synchronously
+                            // run git sync
                             let result =
                                 ops::run_git_sync(&app.base_path).map_err(|e| e.to_string());
 
@@ -155,21 +156,60 @@ fn main() -> Result<()> {
                         app.input.clear();
                         app.status_msg = String::from("Enter filename: ");
                     }
+                    Action::NewFolder => {
+                        app.input_mode = InputMode::CreatingFolder;
+                        app.input.clear();
+                        app.status_msg = String::from("Enter folder name: ");
+                    }
                     Action::RenameNote => {
-                        if let Some(i) = app.list_state.selected()
-                            && i < app.notes.len()
-                        {
-                            app.input_mode = InputMode::Renaming;
-                            app.input = app.notes[i].title.clone();
-                            app.status_msg = String::from("Rename note: ");
+                        if let Some(i) = app.list_state.selected() {
+                            let title = if !app.search_query.is_empty() {
+                                if i < app.notes.len() {
+                                    Some(app.notes[i].title.clone())
+                                } else {
+                                    None
+                                }
+                            } else if i < app.fs_items.len() {
+                                match &app.fs_items[i] {
+                                    data::FileSystemItem::Note(n) => Some(n.title.clone()),
+                                    data::FileSystemItem::Folder(p) => {
+                                        Some(p.file_name().unwrap().to_string_lossy().to_string())
+                                    }
+                                }
+                            } else {
+                                None
+                            };
+
+                            if let Some(t) = title {
+                                app.input_mode = InputMode::Renaming;
+                                app.input = t;
+                                app.status_msg = String::from("Rename item: ");
+                            }
                         }
                     }
                     Action::DeleteNote => {
-                        if let Some(i) = app.list_state.selected()
-                            && i < app.notes.len()
-                        {
-                            app.input_mode = InputMode::ConfirmDelete;
-                            app.status_msg = format!("Delete '{}'? (y/n)", app.notes[i].title);
+                        if let Some(i) = app.list_state.selected() {
+                            let name = if !app.search_query.is_empty() {
+                                if i < app.notes.len() {
+                                    Some(app.notes[i].title.clone())
+                                } else {
+                                    None
+                                }
+                            } else if i < app.fs_items.len() {
+                                match &app.fs_items[i] {
+                                    data::FileSystemItem::Note(n) => Some(n.title.clone()),
+                                    data::FileSystemItem::Folder(p) => {
+                                        Some(p.file_name().unwrap().to_string_lossy().to_string())
+                                    }
+                                }
+                            } else {
+                                None
+                            };
+
+                            if let Some(n) = name {
+                                app.input_mode = InputMode::ConfirmDelete;
+                                app.status_msg = format!("Delete '{}'? (y/n)", n);
+                            }
                         }
                     }
                     Action::EnterChar(c) => {
@@ -181,7 +221,9 @@ fn main() -> Result<()> {
                     Action::SubmitInput => match app.input_mode {
                         InputMode::Editing => {
                             if !app.input.trim().is_empty() {
-                                match ops::create_note(&app.base_path, &app.input) {
+                                // create relative to current_dir
+                                let target_path = app.base_path.join(&app.current_dir);
+                                match ops::create_note(&target_path, &app.input) {
                                     Ok(path) => {
                                         events.pause();
                                         if let Err(e) = ops::open_editor(
@@ -194,6 +236,8 @@ fn main() -> Result<()> {
                                         events.resume();
                                         app.input_mode = InputMode::Normal;
                                         app.status_msg = String::from("Note created.");
+                                        // refresh view to show new file
+                                        app.refresh_fs_view();
                                         terminal.clear()?;
                                     }
                                     Err(e) => {
@@ -204,31 +248,85 @@ fn main() -> Result<()> {
                         }
                         InputMode::Renaming => {
                             if let Some(i) = app.list_state.selected()
-                                && i < app.notes.len()
                                 && !app.input.trim().is_empty()
                             {
-                                match ops::rename_note(&app.notes[i].path, &app.input) {
-                                    Ok(_) => {
-                                        app.input_mode = InputMode::Normal;
-                                        app.status_msg = String::from("Note renamed.");
+                                let old_path = if !app.search_query.is_empty() {
+                                    if i < app.notes.len() {
+                                        Some(app.notes[i].path.clone())
+                                    } else {
+                                        None
                                     }
-                                    Err(e) => {
-                                        app.status_msg = format!("Rename error: {}", e);
+                                } else if i < app.fs_items.len() {
+                                    match &app.fs_items[i] {
+                                        data::FileSystemItem::Note(n) => Some(n.path.clone()),
+                                        data::FileSystemItem::Folder(p) => Some(p.clone()),
+                                    }
+                                } else {
+                                    None
+                                };
+
+                                if let Some(path) = old_path {
+                                    match ops::rename_note(&path, &app.input) {
+                                        Ok(_) => {
+                                            app.input_mode = InputMode::Normal;
+                                            app.status_msg = String::from("Item renamed.");
+                                            app.refresh_fs_view();
+                                        }
+                                        Err(e) => {
+                                            app.status_msg = format!("Rename error: {}", e);
+                                        }
                                     }
                                 }
                             }
                         }
                         InputMode::ConfirmDelete => {
-                            if let Some(i) = app.list_state.selected()
-                                && i < app.notes.len()
-                            {
-                                if let Err(e) = ops::delete_note(&app.notes[i].path) {
-                                    app.status_msg = format!("Delete error: {}", e);
+                            if let Some(i) = app.list_state.selected() {
+                                let path_to_delete = if !app.search_query.is_empty() {
+                                    if i < app.notes.len() {
+                                        Some(app.notes[i].path.clone())
+                                    } else {
+                                        None
+                                    }
+                                } else if i < app.fs_items.len() {
+                                    match &app.fs_items[i] {
+                                        data::FileSystemItem::Note(n) => Some(n.path.clone()),
+                                        data::FileSystemItem::Folder(p) => Some(p.clone()),
+                                    }
                                 } else {
-                                    app.status_msg = String::from("Note deleted.");
+                                    None
+                                };
+
+                                if let Some(path) = path_to_delete {
+                                    let res = if path.is_dir() {
+                                        fs::remove_dir_all(&path).map_err(KirokuError::Io)
+                                    } else {
+                                        ops::delete_note(&path)
+                                    };
+
+                                    if let Err(e) = res {
+                                        app.status_msg = format!("Delete error: {}", e);
+                                    } else {
+                                        app.status_msg = String::from("Item deleted.");
+                                        app.refresh_fs_view();
+                                    }
                                 }
                             }
                             app.input_mode = InputMode::Normal;
+                        }
+                        InputMode::CreatingFolder => {
+                            if !app.input.trim().is_empty() {
+                                let target_path = app.base_path.join(&app.current_dir);
+                                match ops::create_folder(&target_path, &app.input) {
+                                    Ok(_) => {
+                                        app.input_mode = InputMode::Normal;
+                                        app.status_msg = String::from("Folder created.");
+                                        app.refresh_fs_view();
+                                    }
+                                    Err(e) => {
+                                        app.status_msg = format!("Error: {}", e);
+                                    }
+                                }
+                            }
                         }
                         _ => {}
                     },
@@ -238,31 +336,57 @@ fn main() -> Result<()> {
                         app.status_msg = String::from("Cancelled.");
                     }
                     Action::EditNote => {
-                        if let Some(i) = app.list_state.selected()
-                            && i < app.notes.len()
-                        {
-                            let path = app.notes[i].path.clone();
-                            events.pause();
-                            if let Err(e) = ops::open_editor(
-                                &app.base_path,
-                                Some(&path),
-                                app.config.editor_cmd.as_deref(),
-                            ) {
-                                log::error!("Failed to open editor for {:?}: {}", path, e);
-                                app.status_msg = format!("Editor error: {}", e);
+                        if let Some(i) = app.list_state.selected() {
+                            let path = if !app.search_query.is_empty() {
+                                if i < app.notes.len() {
+                                    Some(app.notes[i].path.clone())
+                                } else {
+                                    None
+                                }
+                            } else if i < app.fs_items.len() {
+                                match &app.fs_items[i] {
+                                    data::FileSystemItem::Note(n) => Some(n.path.clone()),
+                                    data::FileSystemItem::Folder(_) => None, // cannot edit folder
+                                }
                             } else {
-                                terminal.clear()?;
+                                None
+                            };
+
+                            if let Some(p) = path {
+                                events.pause();
+                                if let Err(e) = ops::open_editor(
+                                    &app.base_path,
+                                    Some(&p),
+                                    app.config.editor_cmd.as_deref(),
+                                ) {
+                                    log::error!("Failed to open editor for {:?}: {}", p, e);
+                                    app.status_msg = format!("Editor error: {}", e);
+                                } else {
+                                    terminal.clear()?;
+                                }
+                                events.resume();
                             }
-                            events.resume();
                         }
                     }
                     Action::CopyContent => {
-                        if let Some(i) = app.list_state.selected()
-                            && i < app.notes.len()
-                        {
-                            let note = &app.notes[i];
-                            if let Some(content) = &note.content {
-                                // Lazy init clipboard if missing
+                        if let Some(i) = app.list_state.selected() {
+                            let content = if !app.search_query.is_empty() {
+                                if i < app.notes.len() {
+                                    app.notes[i].content.clone()
+                                } else {
+                                    None
+                                }
+                            } else if i < app.fs_items.len() {
+                                match &app.fs_items[i] {
+                                    data::FileSystemItem::Note(n) => n.content.clone(),
+                                    data::FileSystemItem::Folder(_) => None,
+                                }
+                            } else {
+                                None
+                            };
+
+                            if let Some(c) = content {
+                                // lazy init clipboard if missing
                                 if app.clipboard.is_none() {
                                     match Clipboard::new() {
                                         Ok(cb) => app.clipboard = Some(cb),
@@ -273,7 +397,7 @@ fn main() -> Result<()> {
                                 }
 
                                 if let Some(cb) = &mut app.clipboard {
-                                    if let Err(e) = cb.set_text(content.clone()) {
+                                    if let Err(e) = cb.set_text(c) {
                                         app.status_msg = format!("Copy error: {}", e);
                                     } else {
                                         app.status_msg =
@@ -283,32 +407,49 @@ fn main() -> Result<()> {
                                     app.status_msg = String::from("Clipboard unavailable.");
                                 }
                             } else {
-                                app.status_msg = String::from("Note content not loaded.");
+                                app.status_msg =
+                                    String::from("Note content not loaded or item is folder.");
                             }
                         }
                     }
                     Action::CopyPath => {
-                        if let Some(i) = app.list_state.selected()
-                            && i < app.notes.len()
-                        {
-                            let path = app.notes[i].path.to_string_lossy().to_string();
-
-                            // Lazy init clipboard if missing
-                            if app.clipboard.is_none() {
-                                match Clipboard::new() {
-                                    Ok(cb) => app.clipboard = Some(cb),
-                                    Err(e) => log::warn!("Failed to re-init clipboard: {}", e),
-                                }
-                            }
-
-                            if let Some(cb) = &mut app.clipboard {
-                                if let Err(e) = cb.set_text(path) {
-                                    app.status_msg = format!("Copy error: {}", e);
+                        if let Some(i) = app.list_state.selected() {
+                            let path_str = if !app.search_query.is_empty() {
+                                if i < app.notes.len() {
+                                    Some(app.notes[i].path.to_string_lossy().to_string())
                                 } else {
-                                    app.status_msg = String::from("Path copied to clipboard.");
+                                    None
+                                }
+                            } else if i < app.fs_items.len() {
+                                match &app.fs_items[i] {
+                                    data::FileSystemItem::Note(n) => {
+                                        Some(n.path.to_string_lossy().to_string())
+                                    }
+                                    data::FileSystemItem::Folder(p) => {
+                                        Some(p.to_string_lossy().to_string())
+                                    }
                                 }
                             } else {
-                                app.status_msg = String::from("Clipboard unavailable.");
+                                None
+                            };
+
+                            if let Some(p) = path_str {
+                                if app.clipboard.is_none() {
+                                    match Clipboard::new() {
+                                        Ok(cb) => app.clipboard = Some(cb),
+                                        Err(e) => log::warn!("Failed to re-init clipboard: {}", e),
+                                    }
+                                }
+
+                                if let Some(cb) = &mut app.clipboard {
+                                    if let Err(e) = cb.set_text(p) {
+                                        app.status_msg = format!("Copy error: {}", e);
+                                    } else {
+                                        app.status_msg = String::from("Path copied to clipboard.");
+                                    }
+                                } else {
+                                    app.status_msg = String::from("Clipboard unavailable.");
+                                }
                             }
                         }
                     }
@@ -342,7 +483,7 @@ fn main() -> Result<()> {
         }
     }
 
-    // teardown: restore terminal state
+    // restore terminal state
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
