@@ -8,13 +8,12 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-// open the user's preferred editor for the given file
+// open user editor
 pub fn open_editor(
     base_path: &Path,
     file_path: Option<&PathBuf>,
     editor_cmd: Option<&str>,
 ) -> Result<(), KirokuError> {
-    // temporarily disable raw mode to allow the editor to take over the terminal
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen)?;
 
@@ -33,7 +32,6 @@ pub fn open_editor(
 
     let status = cmd.status().map_err(KirokuError::Io)?;
 
-    // restore raw mode after editor exits
     execute!(io::stdout(), EnterAlternateScreen)?;
     enable_raw_mode()?;
 
@@ -46,7 +44,7 @@ pub fn open_editor(
     Ok(())
 }
 
-// create a new markdown file with the given filename
+// create markdown file
 pub fn create_note(base_path: &Path, filename: &str) -> Result<PathBuf, KirokuError> {
     let mut safe_filename = filename.trim().replace(" ", "_");
     if !safe_filename.ends_with(".md") {
@@ -62,17 +60,37 @@ pub fn create_note(base_path: &Path, filename: &str) -> Result<PathBuf, KirokuEr
         )));
     }
 
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
     fs::File::create(&path)?;
     Ok(path)
 }
 
-// permanently delete the specified note file
+// create directory
+pub fn create_folder(base_path: &Path, foldername: &str) -> Result<PathBuf, KirokuError> {
+    let safe_foldername = foldername.trim().replace(" ", "_");
+    let path = base_path.join(safe_foldername);
+
+    if path.exists() {
+        return Err(KirokuError::Io(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "Folder already exists",
+        )));
+    }
+
+    fs::create_dir_all(&path)?;
+    Ok(path)
+}
+
+// delete note file
 pub fn delete_note(path: &Path) -> Result<(), KirokuError> {
     fs::remove_file(path)?;
     Ok(())
 }
 
-// rename an existing note file
+// rename note
 pub fn rename_note(old_path: &Path, new_filename: &str) -> Result<PathBuf, KirokuError> {
     let mut safe_filename = new_filename.trim().replace(" ", "_");
     if !safe_filename.ends_with(".md") {
@@ -91,11 +109,15 @@ pub fn rename_note(old_path: &Path, new_filename: &str) -> Result<PathBuf, Kirok
         )));
     }
 
+    if let Some(new_parent) = new_path.parent() {
+        fs::create_dir_all(new_parent)?;
+    }
+
     fs::rename(old_path, &new_path)?;
     Ok(new_path)
 }
 
-// sync changes with the remote git repository
+// sync with git
 pub fn run_git_sync(base_path: &Path) -> Result<String, KirokuError> {
     println!("Executing git sync in: {:?}", base_path);
     if !base_path.join(".git").exists() {
@@ -104,14 +126,14 @@ pub fn run_git_sync(base_path: &Path) -> Result<String, KirokuError> {
         ));
     }
 
-    // 1. Check if there are any changes (staged or unstaged)
+    // check for local changes
     let status_out = Command::new("git")
         .args(["status", "--porcelain"])
         .current_dir(base_path)
         .output()?;
     let has_changes = !status_out.stdout.is_empty();
 
-    // 2. Check if we are ahead of the remote
+    // check if ahead of remote
     let ahead_out = Command::new("git")
         .args(["rev-list", "HEAD@{u}..HEAD"])
         .current_dir(base_path)
@@ -123,7 +145,7 @@ pub fn run_git_sync(base_path: &Path) -> Result<String, KirokuError> {
     }
 
     if has_changes {
-        // stage all changes
+        // stage changes
         let add = Command::new("git")
             .arg("add")
             .arg(".")
@@ -134,15 +156,13 @@ pub fn run_git_sync(base_path: &Path) -> Result<String, KirokuError> {
             return Err(KirokuError::Git("git add failed".to_string()));
         }
 
-        // commit changes with a default message
         let _commit = Command::new("git")
             .args(["commit", "-m", "auto-sync from kiroku"])
             .current_dir(base_path)
             .status()?;
     }
 
-    // 3. Push changes to remote only if needed
-    // We re-check if ahead after commit
+    // push to remote if needed
     let ahead_after_commit = Command::new("git")
         .args(["rev-list", "@{u}..HEAD"])
         .current_dir(base_path)
